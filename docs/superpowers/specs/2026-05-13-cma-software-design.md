@@ -1,51 +1,45 @@
-# Design Spec: CMA Report Generation Software (Firebase Edition)
+# Design Spec: CMA Pro AI (Hybrid Architecture)
 
 ## 1. Overview
-A Credit Monitoring Arrangement (CMA) report is a standardized financial document required by Indian banks for loan applications. This software automates the generation of these reports using historical data, projection assumptions, and AI-driven narratives.
+**CMA Pro AI** is an enterprise-grade SaaS platform for generating Credit Monitoring Arrangement (CMA) reports. It automates financial parsing, projection, ratio analysis, and narrative generation for Indian banking standards.
 
-## 2. Tech Stack
-- **Frontend**: React 18 (Vite), TypeScript, Tailwind CSS, shadcn/ui.
-- **State Management**: Zustand.
-- **Database**: Firebase Firestore.
-- **Authentication**: Firebase Auth.
-- **Storage**: Firebase Storage.
-- **Backend (Optional/Secure Tasks)**: Firebase Cloud Functions.
-- **AI**: Anthropic Claude API (via Cloud Functions).
-- **Export**: ExcelJS (Excel) and Puppeteer/Firebase Functions (PDF).
+## 2. Hybrid Tech Stack
+- **Frontend**: React 18 (Vite), TypeScript, Tailwind CSS, **AG Grid**, Zustand, Recharts.
+- **Backend**: Node.js 20, Express, TypeScript, **Prisma ORM**.
+- **Database (Structured)**: **SQLite** (for local development) / **PostgreSQL** (for production).
+- **Database (Real-time)**: **Firebase Firestore** (for drafts, notifications, and progress).
+- **Authentication**: **Firebase Auth** (Custom Claims for Roles: Admin, Analyst, Viewer).
+- **Storage**: **Firebase Storage** (Uploaded spreadsheets and generated reports).
+- **AI**: Anthropic **Claude 3.5 Sonnet** (via Firebase Cloud Functions).
+- **Export**: **ExcelJS** (Bank-ready Excel) and **Puppeteer** (PDF).
 
-## 3. Data Model (Firestore)
-### Collections
-- **`users`**: User profiles and roles.
-- **`clients`**: Company details (name, CIN, PAN, industry).
-- **`reports`**: CMA report metadata, status, and configuration.
-- **`financials`**: Sub-collection within `reports` or separate collection linked by `reportId`. Stores Year-by-Year data (Income Statement, Balance Sheet).
-- **`assumptions`**: Projection settings for each report.
+## 3. Core Modules
+1.  **Auth Module**: Firebase integration + Role-based access.
+2.  **Client/Report Management**: CRUD for companies and financial projects.
+3.  **Financial Import**: SheetJS parsing of Balance Sheets/P&L.
+4.  **Dynamic Account Mapping**: Fuzzy matching and AI-suggested account mapping.
+5.  **CMA Calculation Engine**: Banking-grade formulas (MPBF, DSCR, etc.).
+6.  **Projection Engine**: 2-5 year forecasts with editable assumptions.
+7.  **Ratio Analysis**: Liquidity, Solvency, Efficiency, and Banking ratios.
+8.  **AI Narrative Generator**: Executive summary and risk detection via Claude.
+9.  **Export Engines**: High-fidelity Excel (multiple sheets) and PDF exports.
+10. **Dashboard**: Analytics and trend charts via Recharts.
 
-## 4. Core Modules
-### A. Calculation Engine (TypeScript)
-A pure TypeScript module that computes:
-- Projected P&L and Balance Sheets.
-- Key Ratios: Current Ratio, D/E, DSCR, Interest Coverage, etc.
-- MPBF (Method II) based on RBI guidelines.
-
-### B. AI Integration (Claude)
-- **Executive Summary**: Generates a professional narrative based on financial trends.
-- **Assumption Advisor**: Suggests realistic growth and margin rates based on industry and history.
-- **Anomaly Detection**: Flags red flags for credit officers.
-
-### C. Export Module
-- **Excel**: Generates multi-sheet Excel files matching bank standards.
-- **PDF**: Renders a polished financial report PDF.
+## 4. Data Model (Prisma)
+- `User`: Profile and role.
+- `Client`: Company metadata.
+- `CMAReport`: Parent record for a report.
+- `FinancialYear`: Raw and computed data for each FY.
+- `ProjectionAssumption`: Growth rates, margins, and WC days.
+- `Ratio`: Computed ratios per year.
 
 ## 5. UI/UX Flow
-1. **Dashboard**: Manage clients and reports.
-2. **Data Entry**: Multi-step forms for historical financials.
-3. **Assumptions**: Interactive form with AI suggestions.
-4. **Preview**: Real-time charts and tables of all 12 CMA schedules.
-5. **Narrative**: Edit and finalize the AI-generated summary.
-6. **Export**: One-click download for Excel/PDF.
+- **Clean Fintech Aesthetic**: Professional, data-dense but readable.
+- **Excel-like Tables**: AG Grid for direct financial editing.
+- **Real-time Feedback**: Firestore listeners for AI and export progress.
 
 ## 6. Security
-- Firebase Security Rules to ensure data isolation.
-- API Keys stored in Firebase Environment Variables (Cloud Functions).
-- Role-based access (Admin/Analyst).
+- Firebase custom claims for RBAC.
+- Backend validation of Firebase ID tokens.
+- SQL injection prevention via Prisma.
+- Environment-based API key management.
