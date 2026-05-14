@@ -71,7 +71,7 @@ Format with Strengths, Weaknesses, Opportunities, Threats sections.`
     const prompt = prompts[module] || prompts.executive_summary;
 
     const message = await anthropic.messages.create({
-      model: 'claude-sonnet-4-5',
+      model: 'claude-3-5-sonnet-latest',
       max_tokens: 1024,
       system: systemPrompt,
       messages: [{ role: 'user', content: prompt }]
