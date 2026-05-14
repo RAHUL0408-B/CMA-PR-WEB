@@ -1,0 +1,56 @@
+import express from 'express';
+import cors from 'cors';
+import dotenv from 'dotenv';
+
+dotenv.config();
+
+const app = express();
+const port = process.env.PORT || 4000;
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow localhost on any port and no origin (same-origin)
+    if (!origin || origin.startsWith('http://localhost') || origin.startsWith('http://127.0.0.1')) {
+      callback(null, true);
+    } else {
+      callback(null, origin === process.env.FRONTEND_URL);
+    }
+  }
+}));
+app.use(express.json({ limit: '50mb' }));
+
+// ============================================================
+// ROUTES
+// ============================================================
+import clientRoutes from './routes/clients';
+import reportRoutes from './routes/reports';
+import financialRoutes from './routes/financials';
+import projectionRoutes from './routes/projections';
+import aiRoutes from './routes/ai';
+import exportRoutes from './routes/exports';
+import mappingRoutes from './routes/mappings';
+
+app.get('/api/health', (_req, res) => {
+  res.json({ status: 'ok', version: '2.0.0', service: 'CMA Pro AI API' });
+});
+
+app.use('/api/clients', clientRoutes);
+app.use('/api/reports', reportRoutes);
+app.use('/api/financials', financialRoutes);
+app.use('/api/projections', projectionRoutes);
+app.use('/api/ai', aiRoutes);
+app.use('/api/exports', exportRoutes);
+app.use('/api/mappings', mappingRoutes);
+
+// Global error handler
+app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  console.error('[ERROR]', err);
+  res.status(err.status || 500).json({ error: err.message || 'Internal Server Error' });
+});
+
+app.listen(port, () => {
+  console.log(`\n🚀 CMA Pro AI Server running at http://localhost:${port}`);
+  console.log(`📋 Environment: ${process.env.NODE_ENV || 'development'}\n`);
+});
+
+export default app;

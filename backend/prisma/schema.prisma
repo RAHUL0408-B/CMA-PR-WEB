@@ -1,0 +1,322 @@
+// CMA Pro AI - Enterprise Financial Underwriting Platform
+// Prisma Schema v2.0
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// ============================================================
+// USERS & AUTH
+// ============================================================
+model User {
+  id          String   @id @default(uuid())
+  firebaseUid String   @unique
+  email       String   @unique
+  name        String?
+  role        UserRole @default(ANALYST)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  clients   Client[]
+  reports   Report[]
+  aiLogs    AiLog[]
+  notifications Notification[]
+}
+
+enum UserRole {
+  ADMIN
+  ANALYST
+  VIEWER
+}
+
+// ============================================================
+// CLIENTS
+// ============================================================
+model Client {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id])
+
+  // Identity
+  name         String
+  mobile       String?
+  email        String?
+  aadhaar      String?
+  pan          String?
+  gst          String?
+
+  // Address
+  address      String?
+  city         String?
+  district     String?
+  state        String?
+  pincode      String?
+
+  // Business Info
+  businessName       String?
+  constitution       String?
+  industryType       String?
+  businessActivity   String?
+  dateOfIncorporation DateTime?
+  isExistingBusiness Boolean   @default(true)
+  udyamNumber        String?
+  cinNumber          String?
+  promoterName       String?
+  promoterExperience Int?
+  existingBanker     String?
+  existingLoanDetails String?
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  reports      Report[]
+}
+
+// ============================================================
+// REPORTS
+// ============================================================
+model Report {
+  id       String       @id @default(uuid())
+  userId   String
+  user     User         @relation(fields: [userId], references: [id])
+  clientId String
+  client   Client       @relation(fields: [clientId], references: [id])
+
+  title      String
+  reportType ReportType   @default(CMA)
+  status     ReportStatus @default(DRAFT)
+
+  // Loan Details
+  loanType        String?
+  bankName        String?
+  loanAmount      Float?
+  loanPurpose     String?
+  loanTenure      Int?
+  moratoriumMonths Int?
+  interestRate    Float?
+  repaymentFreq   String?
+  existingEMI     Float?
+
+  // Project Cost (JSON)
+  projectCost     String? // JSON
+  meansOfFinance  String? // JSON
+
+  // Financial Data (JSON blobs)
+  financialYears  FinancialYear[]
+  assumptions     Assumption[]
+  projections     Projection[]
+  loanSchedule    LoanSchedule[]
+  generatedFiles  GeneratedFile[]
+  aiLogs          AiLog[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum ReportType {
+  CMA
+  PROJECT_REPORT
+  BANK_LOAN
+  DSCR
+  EMI
+  RATIO_ANALYSIS
+  WORKING_CAPITAL
+  LOAN_ELIGIBILITY
+  BUSINESS_FINANCIAL
+}
+
+enum ReportStatus {
+  DRAFT
+  IN_PROGRESS
+  REVIEW
+  COMPLETED
+  EXPORTED
+}
+
+// ============================================================
+// FINANCIAL YEARS (Historical P&L and Balance Sheet)
+// ============================================================
+model FinancialYear {
+  id       String @id @default(uuid())
+  reportId String
+  report   Report @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  year          String // e.g. "2022-23"
+  yearType      YearType @default(HISTORICAL)
+
+  // P&L Data (stored as JSON for flexibility)
+  plData        String? // JSON: { grossSales, otherIncome, rawMaterial, ... }
+
+  // Balance Sheet Data (stored as JSON)
+  bsLiabilities String? // JSON: { shareCapital, reserves, securedLoan, ... }
+  bsAssets      String? // JSON: { landBuilding, plantMachinery, inventory, ... }
+
+  // Computed / Calculated Values
+  calculatedRatios String? // JSON
+
+  isBalanced    Boolean @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+enum YearType {
+  HISTORICAL
+  PROJECTED
+}
+
+// ============================================================
+// PROJECTION ASSUMPTIONS
+// ============================================================
+model Assumption {
+  id       String @id @default(uuid())
+  reportId String
+  report   Report @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  salesGrowthPct      Float @default(15)
+  rawMaterialPct      Float @default(60)
+  salaryGrowthPct     Float @default(10)
+  adminExpensePct     Float @default(5)
+  powerExpensePct     Float @default(3)
+  interestRate        Float @default(12)
+  depreciationRate    Float @default(10)
+  taxRate             Float @default(25)
+  inflationRate       Float @default(6)
+
+  // Capacity Utilization per year (JSON array)
+  capacityUtilization String @default("[70, 80, 85, 90, 95]")
+
+  debtorDays    Int @default(45)
+  creditorDays  Int @default(30)
+  inventoryDays Int @default(60)
+
+  projectionYears Int @default(5)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ============================================================
+// PROJECTIONS (Computed Results)
+// ============================================================
+model Projection {
+  id       String @id @default(uuid())
+  reportId String
+  report   Report @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  year     String
+  scenario ScenarioType @default(BASE)
+
+  plProjection   String? // JSON
+  bsProjection   String? // JSON
+  cfProjection   String? // JSON
+  ratios         String? // JSON
+  dscr           Float?
+
+  createdAt DateTime @default(now())
+}
+
+enum ScenarioType {
+  BASE
+  OPTIMISTIC
+  PESSIMISTIC
+}
+
+// ============================================================
+// LOAN SCHEDULE
+// ============================================================
+model LoanSchedule {
+  id       String @id @default(uuid())
+  reportId String
+  report   Report @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  loanAmount      Float
+  interestRate    Float
+  tenureMonths    Int
+  moratoriumMonths Int @default(0)
+  emiAmount       Float?
+  scheduleData    String? // JSON array of monthly rows
+
+  createdAt DateTime @default(now())
+}
+
+// ============================================================
+// GENERATED FILES
+// ============================================================
+model GeneratedFile {
+  id       String   @id @default(uuid())
+  reportId String
+  report   Report   @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  fileType  FileType
+  fileName  String
+  filePath  String?
+  fileSize  Int?
+  firebaseUrl String?
+
+  createdAt DateTime @default(now())
+}
+
+enum FileType {
+  EXCEL_CMA
+  EXCEL_PROJECT
+  PDF_CMA
+  PDF_PROJECT
+  EXCEL_EMI
+}
+
+// ============================================================
+// AI LOGS
+// ============================================================
+model AiLog {
+  id       String @id @default(uuid())
+  reportId String
+  report   Report @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User   @relation(fields: [userId], references: [id])
+
+  prompt   String
+  response String
+  tokens   Int?
+  module   String? // e.g. "executive_summary", "risk_analysis"
+
+  createdAt DateTime @default(now())
+}
+
+// ============================================================
+// NOTIFICATIONS
+// ============================================================
+model Notification {
+  id      String   @id @default(uuid())
+  userId  String
+  user    User     @relation(fields: [userId], references: [id])
+
+  title   String
+  message String
+  type    String  @default("INFO")
+  isRead  Boolean @default(false)
+
+  createdAt DateTime @default(now())
+}
+
+// ============================================================
+// MAPPING TEMPLATES (Account Mapping Memory)
+// ============================================================
+model MappingTemplate {
+  id          String @id @default(uuid())
+  industry    String?
+  sourceLabel String
+  targetField String
+  confidence  Float  @default(1.0)
+  usageCount  Int    @default(1)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([sourceLabel, targetField])
+}
