@@ -1,31 +1,36 @@
 import { useEffect, useState, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { api } from '../../lib/api';
-import LoanTab from './tabs/LoanTab';
 import FinancialInputTab from './tabs/FinancialInputTab';
 import AssumptionsTab from './tabs/AssumptionsTab';
 import ProjectionsTab from './tabs/ProjectionsTab';
 import AICommentaryTab from './tabs/AICommentaryTab';
 import ExportTab from './tabs/ExportTab';
+import PreviewTab from './tabs/PreviewTab';
+import CoverPageTab from './tabs/CoverPageTab';
+import LoanTab from './tabs/LoanTab';
 
-const TABS = [
-  { key: 'overview', label: 'Overview', icon: '📊' },
-  { key: 'loan', label: 'Loan Details', icon: '🏦' },
-  { key: 'financials', label: 'Historical Financials', icon: '📈' },
+const CMA_TABS = [
+  { key: 'home', label: 'Home', icon: '🏠' },
+  { key: 'company', label: 'Company Details', icon: '🏢' },
+  { key: 'loan', label: 'Project Cost & Loan', icon: '🏦' },
+  { key: 'pl', label: 'Operating Statement', icon: '📄' },
+  { key: 'assets', label: 'Assets', icon: '📊' },
+  { key: 'liabilities', label: 'Liabilities', icon: '⚖️' },
+  { key: 'cover', label: 'Edit Cover Page', icon: '📝' },
   { key: 'assumptions', label: 'Assumptions', icon: '⚙️' },
-  { key: 'projections', label: 'Projections & Ratios', icon: '📉' },
+  { key: 'projections', label: 'Projections', icon: '📉' },
   { key: 'ai', label: 'AI Commentary', icon: '🤖' },
-  { key: 'export', label: 'Export Reports', icon: '📥' },
+  { key: 'preview', label: 'Preview', icon: '👁️' },
+  { key: 'download', label: 'Download', icon: '📥' },
 ];
 
 export default function ReportWorkspace() {
   const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
   const [report, setReport] = useState<any>(null);
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState('home');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [saveMsg, setSaveMsg] = useState('');
 
   const fetchReport = useCallback(() => {
     if (!id) return;
@@ -34,171 +39,299 @@ export default function ReportWorkspace() {
 
   useEffect(() => { fetchReport(); }, [fetchReport]);
 
-  const saveField = async (data: any) => {
+  const saveReport = async (data: any) => {
     if (!id) return;
     setSaving(true);
     try {
       const updated = await api.reports.update(id, data);
       setReport((r: any) => ({ ...r, ...updated }));
-      setSaveMsg('Saved'); setTimeout(() => setSaveMsg(''), 2000);
-    } catch (err: any) { setSaveMsg('Error: ' + err.message); }
+    } catch (err: any) { console.error(err); }
     finally { setSaving(false); }
   };
 
-  const statusBadge = (s: string) => {
-    const map: Record<string,string> = {DRAFT:'badge-gray',IN_PROGRESS:'badge-amber',REVIEW:'badge-blue',COMPLETED:'badge-green',EXPORTED:'badge-purple'};
-    return <span className={`badge ${map[s]||'badge-gray'}`}>{s}</span>;
+  const saveClient = async (data: any) => {
+    if (!report?.clientId) return;
+    setSaving(true);
+    try {
+      await api.clients.update(report.clientId, data);
+      fetchReport();
+    } catch (err: any) { console.error(err); }
+    finally { setSaving(false); }
   };
 
   if (loading) return (
-    <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:400}}>
+    <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh'}}>
       <div className="spinner spinner-dark" style={{width:28,height:28}} />
     </div>
   );
   if (!report) return <div className="alert alert-error">Report not found</div>;
 
   return (
-    <div className="fade-in">
-      {/* Header */}
-      <div style={{ marginBottom: 20 }}>
-        <div style={{ display:'flex', alignItems:'center', gap: 8, marginBottom: 6 }}>
-          <button onClick={() => navigate(`/clients/${report.clientId}`)} className="btn btn-ghost btn-sm" style={{padding:'4px 8px'}}>
-            ← {report.client?.name}
-          </button>
-          {statusBadge(report.status)}
-          {saving && <span style={{fontSize:11,color:'var(--text-muted)'}}>Saving...</span>}
-          {saveMsg && <span style={{fontSize:11,color:'var(--accent-green)'}}>{saveMsg}</span>}
-        </div>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-          <div>
-            <h1 className="page-title" style={{fontSize:20}}>{report.title}</h1>
-            <div style={{fontSize:12,color:'var(--text-muted)',marginTop:2}}>
-              <span className="badge badge-blue" style={{fontSize:10,marginRight:6}}>{report.reportType?.replace(/_/g,' ')}</span>
-              {report.client?.businessName || report.client?.name}
-              {report.loanAmount && ` · ₹${Number(report.loanAmount).toLocaleString('en-IN')} Lakhs`}
-            </div>
-          </div>
-          <div style={{display:'flex',gap:8}}>
-            <button className="btn btn-secondary btn-sm" onClick={() => saveField({ status: 'COMPLETED' })}>
-              Mark Complete
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Tab Bar */}
-      <div className="tab-bar">
-        {TABS.map(t => (
-          <button key={t.key} className={`tab-item ${activeTab === t.key ? 'active' : ''}`}
+    <div className="cma-workspace">
+      {/* Navigation Bar */}
+      <div className="cma-nav">
+        {CMA_TABS.map(t => (
+          <button key={t.key} className={`cma-nav-item ${activeTab === t.key ? 'active' : ''}`}
             onClick={() => setActiveTab(t.key)}>
-            <span style={{marginRight:5}}>{t.icon}</span>{t.label}
+            <span style={{fontSize:16}}>{t.icon}</span>
+            {t.label}
           </button>
         ))}
+        <div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:12}}>
+          {saving && <div className="spinner spinner-dark" style={{width:14,height:14}} />}
+          <button className="btn btn-primary btn-sm" onClick={() => setActiveTab('download')}>
+            📥 Download
+          </button>
+        </div>
       </div>
 
-      {/* Tab Content */}
-      <div style={{position:'relative'}}>
-        {activeTab === 'overview' && <OverviewTab report={report} onSave={saveField} />}
-        {activeTab === 'loan' && <LoanTab report={report} onSave={saveField} />}
-        {activeTab === 'financials' && <FinancialInputTab reportId={id!} onUpdate={fetchReport} />}
+      {/* Wizard Header */}
+      <div className="cma-wizard-header" style={{
+        background: '#ffffff',
+        border: '1px solid #e2e8f0',
+        borderRadius: 12,
+        padding: '16px 20px',
+        marginBottom: 20,
+        boxShadow: 'var(--shadow-sm)'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+          <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
+            Report Generation Wizard
+          </span>
+          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--primary)' }}>
+            Progress: {Math.round((CMA_TABS.findIndex(t => t.key === activeTab) + 1) / CMA_TABS.length * 100)}%
+          </span>
+        </div>
+        
+        {/* Progress Bar */}
+        <div style={{ width: '100%', height: 6, background: '#f1f5f9', borderRadius: 3, overflow: 'hidden', display: 'flex' }}>
+          <div style={{
+            width: `${((CMA_TABS.findIndex(t => t.key === activeTab) + 1) / CMA_TABS.length) * 100}%`,
+            height: '100%',
+            background: 'linear-gradient(90deg, var(--primary) 0%, var(--accent) 100%)',
+            transition: 'width 0.3s ease'
+          }} />
+        </div>
+
+        {/* Step Indicator Labels */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 6, marginTop: 12, overflowX: 'auto', paddingBottom: 4 }}>
+          {CMA_TABS.map((t, idx) => {
+            const currentIdx = CMA_TABS.findIndex(tab => tab.key === activeTab);
+            const isCompleted = idx < currentIdx;
+            const isActive = idx === currentIdx;
+            return (
+              <button key={t.key} 
+                onClick={() => setActiveTab(t.key)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  minWidth: 70,
+                  opacity: isActive || isCompleted ? 1 : 0.45,
+                  transition: 'opacity 0.2s ease',
+                  padding: 4
+                }}>
+                <div style={{
+                  width: 24,
+                  height: 24,
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 11,
+                  fontWeight: 700,
+                  background: isActive ? 'var(--primary)' : isCompleted ? 'var(--accent-green)' : '#f1f5f9',
+                  color: isActive || isCompleted ? '#ffffff' : 'var(--text-secondary)',
+                  border: `2px solid ${isActive ? 'var(--primary)' : isCompleted ? 'var(--accent-green)' : 'var(--border-strong)'}`
+                }}>
+                  {isCompleted ? '✓' : idx + 1}
+                </div>
+                <span style={{ fontSize: 10, fontWeight: isActive ? 700 : 500, color: isActive ? 'var(--primary)' : 'var(--text-secondary)', marginTop: 4, whiteSpace: 'nowrap' }}>
+                  {t.label}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Main Content Area */}
+      <div className="cma-container">
+        {activeTab === 'home' && <HomeTab report={report} />}
+        {activeTab === 'company' && <CompanyDetailsTab report={report} onSave={saveClient} />}
+        {activeTab === 'loan' && <LoanTab report={report} onSave={saveReport} />}
+        {activeTab === 'pl' && <FinancialInputTab reportId={id!} type="PL" onUpdate={fetchReport} />}
+        {activeTab === 'assets' && <FinancialInputTab reportId={id!} type="ASSETS" onUpdate={fetchReport} />}
+        {activeTab === 'liabilities' && <FinancialInputTab reportId={id!} type="LIABILITIES" onUpdate={fetchReport} />}
+        {activeTab === 'cover' && <CoverPageTab report={report} onSave={saveReport} />}
         {activeTab === 'assumptions' && <AssumptionsTab reportId={id!} />}
         {activeTab === 'projections' && <ProjectionsTab reportId={id!} />}
         {activeTab === 'ai' && <AICommentaryTab reportId={id!} report={report} />}
-        {activeTab === 'export' && <ExportTab reportId={id!} report={report} />}
+        {activeTab === 'preview' && <PreviewTab reportId={id!} />}
+        {activeTab === 'download' && <ExportTab reportId={id!} report={report} />}
+      </div>
+
+      {/* Wizard Footer */}
+      <div className="cma-wizard-footer" style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginTop: 24,
+        padding: '16px 24px',
+        background: '#ffffff',
+        border: '1px solid #e2e8f0',
+        borderRadius: 12,
+        boxShadow: 'var(--shadow-sm)'
+      }}>
+        <button
+          className="btn btn-secondary"
+          disabled={activeTab === 'home'}
+          onClick={() => {
+            const idx = CMA_TABS.findIndex(t => t.key === activeTab);
+            if (idx > 0) setActiveTab(CMA_TABS[idx - 1].key);
+          }}
+        >
+          ← Previous Step
+        </button>
+        
+        <div style={{ fontSize: 13, color: '#64748b', fontWeight: 600 }}>
+          Step {CMA_TABS.findIndex(t => t.key === activeTab) + 1} of {CMA_TABS.length} · {CMA_TABS.find(t => t.key === activeTab)?.label}
+        </div>
+
+        <button
+          className="btn btn-primary"
+          disabled={activeTab === 'download'}
+          onClick={() => {
+            const idx = CMA_TABS.findIndex(t => t.key === activeTab);
+            if (idx < CMA_TABS.length - 1) setActiveTab(CMA_TABS[idx + 1].key);
+          }}
+        >
+          {activeTab === 'preview' ? 'Proceed to Download 📥' : 'Next Step →'}
+        </button>
+      </div>
+
+      {/* Assistance Card */}
+      <div className="cma-assist-card">
+        <div className="cma-assist-icon">🎧</div>
+        <div className="cma-assist-title">Need Assistance for your report</div>
+        <button className="cma-assist-btn">Contact Us</button>
       </div>
     </div>
   );
 }
 
 // ============================================================
-// OVERVIEW TAB
+// HOME TAB (Simplified Dashboard)
 // ============================================================
-function OverviewTab({ report, onSave }: { report: any; onSave: (d: any) => void }) {
-  const infoItems = [
-    { label: 'Client', value: report.client?.name },
-    { label: 'Business', value: report.client?.businessName },
-    { label: 'Industry', value: report.client?.industryType },
-    { label: 'PAN', value: report.client?.pan },
-    { label: 'Constitution', value: report.client?.constitution },
-    { label: 'Promoter', value: report.client?.promoterName },
-    { label: 'Bank', value: report.bankName || report.client?.existingBanker },
-    { label: 'Loan Type', value: report.loanType },
-    { label: 'Loan Amount', value: report.loanAmount ? `₹${Number(report.loanAmount).toLocaleString('en-IN')} Lakhs` : null },
-    { label: 'Interest Rate', value: report.interestRate ? `${report.interestRate}% p.a.` : null },
-    { label: 'Tenure', value: report.loanTenure ? `${report.loanTenure} months` : null },
-  ];
-
-  const stats = [
-    { label: 'Financial Years', value: report._count?.financialYears || report.financialYears?.length || 0, color: '' },
-    { label: 'Generated Files', value: report._count?.generatedFiles || 0, color: 'green' },
-    { label: 'Report Status', value: report.status, color: 'purple' },
-  ];
-
+function HomeTab({ report }: { report: any }) {
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 20 }}>
-      <div>
-        <div className="card mb-4">
-          <div className="card-header"><div className="card-title">Report Information</div></div>
-          <div className="card-body">
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
-              {infoItems.filter(i => i.value).map(i => (
-                <div key={i.label}>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 3 }}>{i.label}</div>
-                  <div style={{ fontSize: 13, fontWeight: 500 }}>{i.value}</div>
-                </div>
-              ))}
-            </div>
-          </div>
+    <div className="cma-form-card fade-in">
+      <h2 className="cma-section-title">Report Dashboard</h2>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:20}}>
+        <div className="card" style={{padding:24,border:'1px solid #e2e8f0'}}>
+          <div style={{fontSize:12,color:'#64748b',textTransform:'uppercase',fontWeight:600}}>Project</div>
+          <div style={{fontSize:18,fontWeight:700,marginTop:8}}>{report.title}</div>
         </div>
+        <div className="card" style={{padding:24,border:'1px solid #e2e8f0'}}>
+          <div style={{fontSize:12,color:'#64748b',textTransform:'uppercase',fontWeight:600}}>Client</div>
+          <div style={{fontSize:18,fontWeight:700,marginTop:8}}>{report.client?.name}</div>
+        </div>
+        <div className="card" style={{padding:24,border:'1px solid #e2e8f0'}}>
+          <div style={{fontSize:12,color:'#64748b',textTransform:'uppercase',fontWeight:600}}>Status</div>
+          <div style={{fontSize:18,fontWeight:700,marginTop:8,color:'#7c3aed'}}>{report.status}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
-        <div className="card">
-          <div className="card-header"><div className="card-title">Quick Edit — Report Title</div></div>
-          <div className="card-body">
-            <div style={{display:'flex',gap:10}}>
-              <input className="form-input" defaultValue={report.title}
-                onBlur={e => onSave({ title: e.target.value })} style={{flex:1}} />
-              <select className="form-select" defaultValue={report.status}
-                onChange={e => onSave({ status: e.target.value })} style={{width:160}}>
-                {['DRAFT','IN_PROGRESS','REVIEW','COMPLETED','EXPORTED'].map(s => <option key={s}>{s}</option>)}
-              </select>
-            </div>
-          </div>
+// ============================================================
+// COMPANY DETAILS TAB (Matching Screenshot)
+// ============================================================
+function CompanyDetailsTab({ report, onSave }: { report: any; onSave: (d: any) => void }) {
+  const client = report.client || {};
+  return (
+    <div className="cma-form-card fade-in">
+      <h2 className="cma-section-title">Company details</h2>
+      
+      <div className="cma-form-group">
+        <div className="cma-label">Company name *</div>
+        <div className="cma-input-wrapper">
+          <div className="cma-input-prefix">M/s</div>
+          <input className="cma-input cma-input-prefixed" 
+            defaultValue={client.businessName} 
+            onBlur={e => onSave({ businessName: e.target.value })} 
+            placeholder="Company Name" />
         </div>
       </div>
 
-      <div style={{display:'flex',flexDirection:'column',gap:16}}>
-        {stats.map(s => (
-          <div key={s.label} className={`stat-card ${s.color}`}>
-            <div className="stat-label">{s.label}</div>
-            <div className="stat-value">{s.value}</div>
-          </div>
-        ))}
+      <div className="cma-form-group">
+        <div className="cma-label">Address of the unit *</div>
+        <textarea className="cma-textarea" 
+          defaultValue={client.address}
+          onBlur={e => onSave({ address: e.target.value })}
+          placeholder="Complete Address" />
+      </div>
 
-        <div className="card">
-          <div className="card-header"><div className="card-title">Workflow</div></div>
-          <div className="card-body" style={{display:'flex',flexDirection:'column',gap:8}}>
-            {[
-              { step: 'Loan Details', done: !!report.loanAmount },
-              { step: 'Financial Data', done: (report.financialYears?.length || 0) > 0 },
-              { step: 'Assumptions', done: (report.assumptions?.length || 0) > 0 },
-              { step: 'Projections', done: (report.projections?.length || 0) > 0 },
-              { step: 'AI Commentary', done: false },
-              { step: 'Export', done: (report.generatedFiles?.length || 0) > 0 },
-            ].map((item, i) => (
-              <div key={i} style={{display:'flex',alignItems:'center',gap:8,fontSize:12}}>
-                <div style={{
-                  width:18,height:18,borderRadius:'50%',flexShrink:0,
-                  background: item.done ? 'var(--accent-green)' : 'var(--border)',
-                  display:'flex',alignItems:'center',justifyContent:'center',
-                  color: item.done ? 'white' : 'var(--text-muted)',fontSize:10,fontWeight:700
-                }}>{item.done ? '✓' : i+1}</div>
-                <span style={{color: item.done ? 'var(--accent-green)' : 'var(--text-secondary)', fontWeight: item.done ? 600 : 400}}>
-                  {item.step}
-                </span>
-              </div>
-            ))}
-          </div>
+      <div className="cma-form-group">
+        <div className="cma-label">Your Location *</div>
+        <div className="cma-button-toggle">
+          <button className={`cma-toggle-item ${client.cityType === 'RURAL' ? 'active' : ''}`}
+            onClick={() => onSave({ cityType: 'RURAL' })}>Panchayath/Village</button>
+          <button className={`cma-toggle-item ${client.cityType === 'URBAN' ? 'active' : ''}`}
+            onClick={() => onSave({ cityType: 'URBAN' })}>Town, Municipality, Corporation</button>
         </div>
+      </div>
+
+      <div className="cma-form-group">
+        <div className="cma-label">Your activity *</div>
+        <div style={{width:'100%'}}>
+          <input className="cma-input" 
+            defaultValue={client.businessActivity}
+            onBlur={e => onSave({ businessActivity: e.target.value })}
+            placeholder="Stitching unit, Dairy farm, etc." />
+          <div style={{fontSize:12,color:'#64748b',marginTop:6}}>Like Dairy farm, Stiching unit etc</div>
+        </div>
+      </div>
+
+      <div className="cma-form-group">
+        <div className="cma-label">Email</div>
+        <input className="cma-input" 
+          defaultValue={client.email}
+          onBlur={e => onSave({ email: e.target.value })}
+          placeholder="email@example.com" />
+      </div>
+
+      <div className="cma-form-group">
+        <div className="cma-label">Phone Number *</div>
+        <input className="cma-input" 
+          defaultValue={client.mobile}
+          onBlur={e => onSave({ mobile: e.target.value })}
+          placeholder="Phone Number" />
+      </div>
+
+      <div className="cma-form-group">
+        <div className="cma-label">Number of employment</div>
+        <input className="cma-input" type="number"
+          defaultValue={client.employeeCount}
+          onBlur={e => onSave({ employeeCount: parseInt(e.target.value) })}
+          placeholder="Total Employees" />
+      </div>
+
+      <div className="cma-form-group">
+        <div className="cma-label">Firm Registration type *</div>
+        <select className="cma-input"
+          defaultValue={client.constitution}
+          onChange={e => onSave({ constitution: e.target.value })}>
+          <option value="Proprietorship">Proprietorship</option>
+          <option value="Partnership">Partnership</option>
+          <option value="Private Limited">Private Limited</option>
+          <option value="LLP">LLP</option>
+          <option value="Other">Other</option>
+        </select>
       </div>
     </div>
   );

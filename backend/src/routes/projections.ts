@@ -1,6 +1,6 @@
 import { Router } from 'express';
-import { prisma } from '../lib/prisma';
-import { computeProjections, computeLoanSchedule } from '../engines/projectionEngine';
+import { prisma } from '../lib/prisma.js';
+import { computeProjections, computeLoanSchedule } from '../engines/projectionEngine.js';
 
 const router = Router();
 
@@ -61,7 +61,7 @@ router.post('/:reportId/compute', async (req, res) => {
     if (historicalYears.length === 0) return res.status(400).json({ error: 'Please enter historical financial data first' });
 
     // Parse last historical year as base
-    const lastYear = historicalYears[historicalYears.length - 1];
+    const lastYear = historicalYears[historicalYears.length - 1]!;
     const basePL = lastYear.plData ? JSON.parse(lastYear.plData) : {};
     const baseBS = { assets: JSON.parse(lastYear.bsAssets || '{}'), liabilities: JSON.parse(lastYear.bsLiabilities || '{}') };
 
@@ -76,7 +76,7 @@ router.post('/:reportId/compute', async (req, res) => {
     // Delete old projections and insert new
     await prisma.projection.deleteMany({ where: { reportId } });
     const projectionRecords = await Promise.all(
-      projections.map(p => prisma.projection.create({
+      projections.map((p: any) => prisma.projection.create({
         data: {
           reportId,
           year: p.year,

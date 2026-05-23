@@ -67,6 +67,8 @@ model Client {
   isExistingBusiness Boolean   @default(true)
   udyamNumber        String?
   cinNumber          String?
+  cityType           String? // RURAL, URBAN
+  employeeCount      Int?
   promoterName       String?
   promoterExperience Int?
   existingBanker     String?

@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { prisma } from '../lib/prisma';
+import { prisma } from '../lib/prisma.js';
 
 const router = Router();
 
@@ -73,7 +73,7 @@ router.post('/', async (req, res) => {
 // PUT /api/reports/:id
 router.put('/:id', async (req, res) => {
   try {
-    const { title, status, loanType, bankName, loanAmount, loanPurpose, loanTenure,
+    const { title, status, reportType, loanType, bankName, loanAmount, loanPurpose, loanTenure,
             moratoriumMonths, interestRate, repaymentFreq, existingEMI,
             projectCost, meansOfFinance } = req.body;
     const report = await prisma.report.update({
@@ -81,6 +81,7 @@ router.put('/:id', async (req, res) => {
       data: {
         ...(title !== undefined && { title }),
         ...(status !== undefined && { status }),
+        ...(reportType !== undefined && { reportType }),
         ...(loanType !== undefined && { loanType }),
         ...(bankName !== undefined && { bankName }),
         ...(loanAmount !== undefined && { loanAmount: parseFloat(loanAmount) }),

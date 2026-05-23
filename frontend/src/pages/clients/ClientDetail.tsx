@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../../lib/api';
 
 const LOAN_TYPES = ['Term Loan','Working Capital','CC Limit','OD Limit','Mudra Loan','Machinery Loan','MSME Loan','Startup Loan','Vehicle Loan','LAP','Home Loan'];

@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { prisma } from '../lib/prisma';
+import { prisma } from '../lib/prisma.js';
 
 const router = Router();
 
@@ -26,13 +26,13 @@ router.post('/:reportId/excel', async (req, res) => {
         projectCost: report.projectCost ? JSON.parse(report.projectCost) : null,
         meansOfFinance: report.meansOfFinance ? JSON.parse(report.meansOfFinance) : null
       },
-      financialYears: report.financialYears.map(y => ({
+      financialYears: report.financialYears.map((y: any) => ({
         ...y,
         plData: y.plData ? JSON.parse(y.plData) : {},
         bsAssets: y.bsAssets ? JSON.parse(y.bsAssets) : {},
         bsLiabilities: y.bsLiabilities ? JSON.parse(y.bsLiabilities) : {}
       })),
-      projections: report.projections.map(p => ({
+      projections: report.projections.map((p: any) => ({
         ...p,
         plProjection: p.plProjection ? JSON.parse(p.plProjection) : {},
         bsProjection: p.bsProjection ? JSON.parse(p.bsProjection) : {},

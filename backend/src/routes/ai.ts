@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { prisma } from '../lib/prisma';
+import { prisma } from '../lib/prisma.js';
 import Anthropic from '@anthropic-ai/sdk';
 
 const router = Router();
@@ -20,14 +20,14 @@ router.post('/:reportId/generate', async (req, res) => {
 
     if (!report) return res.status(404).json({ error: 'Report not found' });
 
-    const financialSummary = historicalYears.map(y => ({
+    const financialSummary = historicalYears.map((y: any) => ({
       year: y.year,
       pl: y.plData ? JSON.parse(y.plData) : {},
       assets: y.bsAssets ? JSON.parse(y.bsAssets) : {},
       liabilities: y.bsLiabilities ? JSON.parse(y.bsLiabilities) : {}
     }));
 
-    const projectionSummary = projections.map(p => ({
+    const projectionSummary = projections.map((p: any) => ({
       year: p.year,
       ratios: p.ratios ? JSON.parse(p.ratios) : {},
       dscr: p.dscr
@@ -68,7 +68,7 @@ Constitution: ${report.client?.constitution}
 Format with Strengths, Weaknesses, Opportunities, Threats sections.`
     };
 
-    const prompt = prompts[module] || prompts.executive_summary;
+    const prompt = (prompts[module] || prompts.executive_summary) as string;
 
     const message = await anthropic.messages.create({
       model: 'claude-3-5-sonnet-latest',
@@ -77,7 +77,11 @@ Format with Strengths, Weaknesses, Opportunities, Threats sections.`
       messages: [{ role: 'user', content: prompt }]
     });
 
-    const responseText = message.content[0].type === 'text' ? message.content[0].text : '';
+    let responseText = '';
+    const firstContentBlock = message.content[0];
+    if (firstContentBlock && 'text' in firstContentBlock) {
+      responseText = firstContentBlock.text;
+    }
 
     // Log AI call
     if (report.userId) {
@@ -96,6 +100,74 @@ Format with Strengths, Weaknesses, Opportunities, Threats sections.`
     res.json({ content: responseText, module, tokens: message.usage });
   } catch (err: any) {
     console.error('[AI Error]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/ai/:reportId/parse-financials
+router.post('/:reportId/parse-financials', async (req, res) => {
+  try {
+    const { reportId } = req.params;
+    const { rawText } = req.body;
+
+    if (!rawText) return res.status(400).json({ error: 'Raw text is required' });
+
+    const systemPrompt = `You are a financial data extraction assistant. Parse unstructured financial text and map to structured JSON.
+You MUST output ONLY valid JSON. No markdown other than standard JSON block. Do not write text before or after the JSON.
+
+Map into 3 categories:
+1. plData (Operating Statement) - keys: grossSales, otherIncome, rawMaterial, salaryWages, powerFuel, manufacturingExp, adminExp, sellingExp, rent, repairMaintenance, depreciation, interestExp, taxExpense
+2. bsLiabilities - keys: shareCapital, reserves, securedLoan, unsecuredLoan, ccOdLimit, tradeCreditors, otherCurrentLiab, provisions
+3. bsAssets - keys: landBuilding, plantMachinery, furniture, vehicle, investments, inventory, sundryDebtors, cashBank, loansAdvances, otherCurrentAssets
+
+Rules:
+- All values MUST be positive numbers (floats/integers) representing the figures. If a figure is in Lakhs, normalize it to Lakhs (or if figures are absolute, convert to Lakhs if appropriate, but generally keep the scale consistent as presented).
+- If not found or zero, return 0.
+- Return format:
+{
+  "plData": { "grossSales": 0, "otherIncome": 0, ... },
+  "bsLiabilities": { "shareCapital": 0, ... },
+  "bsAssets": { "landBuilding": 0, ... }
+}`;
+
+    const prompt = `Here is the unstructured financial data text:
+---
+${rawText}
+---
+Extract the financials for the target schema.`;
+
+    const message = await anthropic.messages.create({
+      model: 'claude-3-5-sonnet-latest',
+      max_tokens: 1500,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: prompt }]
+    });
+
+    let responseText = '';
+    const firstContentBlock = message.content[0];
+    if (firstContentBlock && 'text' in firstContentBlock) {
+      responseText = firstContentBlock.text;
+    }
+    
+    let jsonStr = responseText.trim();
+    if (jsonStr.includes('```json')) {
+      const parts = jsonStr.split('```json');
+      const secondPart = parts[1];
+      if (secondPart) {
+        jsonStr = (secondPart.split('```')[0] || '').trim();
+      }
+    } else if (jsonStr.includes('```')) {
+      const parts = jsonStr.split('```');
+      const secondPart = parts[1];
+      if (secondPart) {
+        jsonStr = (secondPart.split('```')[0] || '').trim();
+      }
+    }
+
+    const parsedData = JSON.parse(jsonStr);
+    res.json({ success: true, data: parsedData });
+  } catch (err: any) {
+    console.error('[AI Parse Error]', err);
     res.status(500).json({ error: err.message });
   }
 });

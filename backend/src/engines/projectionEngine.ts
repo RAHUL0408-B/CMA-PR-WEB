@@ -70,6 +70,22 @@ export interface FinancialRatios {
   totalDebt: number;
   workingCapital: number;
   mpbf: number;
+  // Project Feasibility (Finline style)
+  bep?: {
+    variableCost: number;
+    fixedCost: number;
+    contribution: number;
+    bepSales: number;
+    bepCapacityPct: number;
+  };
+  npvIrr?: {
+    discountRate: number;
+    npv: number;
+    irr: number;
+    cashOutflow: number;
+    cashInflow: number;
+    netCashFlow: number;
+  };
 }
 
 // ============================================================
@@ -258,7 +274,7 @@ export function computeProjections(params: {
     depreciationRate: number; taxRate: number; capacityUtilization: string;
     projectionYears: number;
   };
-  report: { loanAmount?: number | null; interestRate?: number | null; loanTenure?: number | null; moratoriumMonths?: number | null };
+  report: { loanAmount?: number | null; interestRate?: number | null; loanTenure?: number | null; moratoriumMonths?: number | null; projectCost?: string | null };
 }) {
   const { basePL, baseBS, assumption, report } = params;
   const capUtil: number[] = JSON.parse(assumption.capacityUtilization);
@@ -296,7 +312,8 @@ export function computeProjections(params: {
 
   for (let i = 0; i < years; i++) {
     const growthFactor = 1 + assumption.salesGrowthPct / 100;
-    const utilFactor = capUtil[i] ? capUtil[i] / 100 : (0.7 + i * 0.05);
+    const val = capUtil[i];
+    const utilFactor = val !== undefined ? val / 100 : (0.7 + i * 0.05);
 
     const projectedSales = i === 0
       ? prevPL.grossSales * growthFactor * utilFactor
@@ -373,7 +390,110 @@ export function computeProjections(params: {
     prevBS = projBS;
   }
 
+  // Parse project cost to get initial outflow for NPV/IRR
+  const projectCostObj = report.projectCost ? JSON.parse(report.projectCost) : {};
+  const totalProjectCost = Object.values(projectCostObj).reduce((sum: number, val: any) => sum + (Number(val) || 0), 0) || report.loanAmount || 0;
+
+  // Year 0 Cash Outflow = -totalProjectCost
+  const projectCashFlows = [-totalProjectCost];
+  for (let i = 0; i < projections.length; i++) {
+    const pl = projections[i].pl;
+    const metrics = computePLMetrics(pl);
+    const pat = metrics.pat;
+    const dep = pl.depreciation;
+    const int = pl.interestExp;
+    projectCashFlows.push(pat + dep + int);
+  }
+
+  const projectIRR = computeIRR(projectCashFlows);
+  const projectNPV = computeNPV(0.10, projectCashFlows);
+
+  // Now, inject bep and npvIrr into the ratios of each year
+  for (let i = 0; i < projections.length; i++) {
+    const pl = projections[i].pl;
+    const bepVal = computeBEP(pl);
+
+    projections[i].ratios = {
+      ...projections[i].ratios,
+      bep: bepVal,
+      npvIrr: {
+        discountRate: 10,
+        npv: round(projectNPV),
+        irr: round(projectIRR),
+        cashOutflow: i === 0 ? round(totalProjectCost) : 0,
+        cashInflow: round(projectCashFlows[i + 1]),
+        netCashFlow: round(i === 0 ? projectCashFlows[i + 1] - totalProjectCost : projectCashFlows[i + 1])
+      }
+    };
+  }
+
   return projections;
+}
+
+export function computeBEP(pl: PLData) {
+  // Variable Costs: Raw Material + Power/Fuel + Mfg Exp + 40% of Salary/Wages + 40% of Admin Exp + 40% of Selling Exp
+  const variableCost = (pl.rawMaterial || 0) + (pl.powerFuel || 0) + (pl.manufacturingExp || 0) +
+    0.4 * (pl.salaryWages || 0) + 0.4 * (pl.adminExp || 0) + 0.4 * (pl.sellingExp || 0);
+
+  const fixedCost = (pl.rent || 0) + (pl.depreciation || 0) + (pl.interestExp || 0) + (pl.repairMaintenance || 0) +
+    0.6 * (pl.salaryWages || 0) + 0.6 * (pl.adminExp || 0) + 0.6 * (pl.sellingExp || 0);
+
+  const totalSales = pl.grossSales || 0;
+  const contribution = Math.max(0, totalSales - variableCost);
+  const contributionRatio = totalSales > 0 ? contribution / totalSales : 0;
+  const bepSales = contributionRatio > 0 ? fixedCost / contributionRatio : 0;
+  const bepCapacityPct = totalSales > 0 ? (bepSales / totalSales) * 100 : 0;
+
+  return {
+    variableCost: round(variableCost),
+    fixedCost: round(fixedCost),
+    contribution: round(contribution),
+    bepSales: round(bepSales),
+    bepCapacityPct: round(Math.min(100, bepCapacityPct))
+  };
+}
+
+export function computeNPV(rate: number, cashFlows: number[]): number {
+  return cashFlows.reduce((sum, cf, t) => sum + cf / Math.pow(1 + rate, t), 0);
+}
+
+export function computeIRR(cashFlows: number[]): number {
+  const hasPositive = cashFlows.some(cf => cf > 0);
+  const hasNegative = cashFlows.some(cf => cf < 0);
+  if (!hasPositive || !hasNegative) return 0;
+
+  let low = -0.99;
+  let high = 2.0;
+  let npvLow = computeNPV(low, cashFlows);
+  let npvHigh = computeNPV(high, cashFlows);
+
+  // If high is not enough, expand it
+  if (npvHigh > 0 && npvLow < 0) {
+    while (npvHigh > 0 && high < 100) {
+      high *= 2;
+      npvHigh = computeNPV(high, cashFlows);
+    }
+  } else if (npvHigh < 0 && npvLow > 0) {
+    while (npvHigh < 0 && high < 100) {
+      high *= 2;
+      npvHigh = computeNPV(high, cashFlows);
+    }
+  }
+
+  for (let i = 0; i < 100; i++) {
+    const mid = (low + high) / 2;
+    const npvMid = computeNPV(mid, cashFlows);
+    if (Math.abs(npvMid) < 0.0001) {
+      return mid * 100;
+    }
+    if (npvMid * npvLow < 0) {
+      high = mid;
+    } else {
+      low = mid;
+      npvLow = npvMid;
+    }
+  }
+  return ((low + high) / 2) * 100;
 }
 
 function round(n: number, dp = 2): number {

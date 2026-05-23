@@ -129,7 +129,7 @@ export default function ExportTab({ reportId, report }: { reportId: string; repo
     { label: 'Multi-Sheet CMA Excel', desc: 'Cover, P&L, BS, Ratios, Loan Schedule', icon: '📊', available: true },
     { label: 'Ratio Analysis Sheet', desc: 'All 12 banking ratios with benchmarks', icon: '📈', available: true },
     { label: 'Loan EMI Schedule', desc: 'Month-wise reducing balance schedule', icon: '💳', available: true },
-    { label: 'PDF Project Report', desc: 'Full bank-style project report (coming soon)', icon: '📄', available: false },
+    { label: 'PDF Project Report', desc: 'Full bank-style project report with charts & AI analysis', icon: '📄', available: true },
     { label: 'Cash Flow Statement', desc: 'Operating, Investing, Financing activities', icon: '💵', available: true },
   ];
 
@@ -194,8 +194,8 @@ export default function ExportTab({ reportId, report }: { reportId: string; repo
                 </>
               )}
             </button>
-            <button className="btn btn-secondary btn-lg" disabled style={{flex:1,opacity:0.5}}>
-              📄 PDF Project Report (Coming Soon)
+            <button className="btn btn-secondary btn-lg" onClick={() => window.open(`/reports/${reportId}/print`, '_blank')} style={{flex:1}}>
+              📄 PDF Project Report (Print/Save)
             </button>
           </div>
 

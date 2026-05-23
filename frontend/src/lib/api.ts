@@ -56,7 +56,8 @@ export const api = {
 
   ai: {
     generate: (reportId: string, module: string) => fetchAPI<any>(`/ai/${reportId}/generate`, { method: 'POST', body: JSON.stringify({ module }) }),
-    history: (reportId: string) => fetchAPI<any[]>(`/ai/${reportId}/history`)
+    history: (reportId: string) => fetchAPI<any[]>(`/ai/${reportId}/history`),
+    parseFinancials: (reportId: string, rawText: string) => fetchAPI<any>(`/ai/${reportId}/parse-financials`, { method: 'POST', body: JSON.stringify({ rawText }) })
   },
 
   mappings: {

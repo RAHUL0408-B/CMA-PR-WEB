@@ -22,13 +22,13 @@ app.use(express.json({ limit: '50mb' }));
 // ============================================================
 // ROUTES
 // ============================================================
-import clientRoutes from './routes/clients';
-import reportRoutes from './routes/reports';
-import financialRoutes from './routes/financials';
-import projectionRoutes from './routes/projections';
-import aiRoutes from './routes/ai';
-import exportRoutes from './routes/exports';
-import mappingRoutes from './routes/mappings';
+import clientRoutes from './routes/clients.js';
+import reportRoutes from './routes/reports.js';
+import financialRoutes from './routes/financials.js';
+import projectionRoutes from './routes/projections.js';
+import aiRoutes from './routes/ai.js';
+import exportRoutes from './routes/exports.js';
+import mappingRoutes from './routes/mappings.js';
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', version: '2.0.0', service: 'CMA Pro AI API' });

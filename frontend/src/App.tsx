@@ -9,6 +9,7 @@ import ClientDetail from './pages/clients/ClientDetail';
 import ClientCreate from './pages/clients/ClientCreate';
 import ReportList from './pages/reports/ReportList';
 import ReportWorkspace from './pages/reports/ReportWorkspace';
+import ReportPrint from './pages/reports/ReportPrint';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -40,6 +41,8 @@ export default function App() {
             <Route path="/reports/:id" element={<ReportWorkspace />} />
             <Route path="/reports/new" element={<ReportWorkspace />} />
           </Route>
+
+          <Route path="/reports/:id/print" element={<ProtectedRoute><ReportPrint /></ProtectedRoute>} />
 
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
