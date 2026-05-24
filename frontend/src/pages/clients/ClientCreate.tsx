@@ -1,7 +1,54 @@
-import { useState } from 'react';
+import { useState, createContext, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { useAuth } from '../../context/AuthContext';
+
+const FormContext = createContext<any>(null);
+
+const Field = ({ label, k, type = 'text', placeholder = '', required = false }: any) => {
+  const { form, errors, set, validateField } = useContext(FormContext);
+  return (
+    <div className="form-group">
+      <label className={`form-label ${required ? 'required' : ''}`}>{label}</label>
+      <input
+        type={type}
+        className={`form-input ${errors[k] ? 'error' : ''}`}
+        placeholder={placeholder}
+        value={form[k]}
+        onChange={set(k)}
+        onBlur={() => validateField(k, form[k])}
+      />
+      {errors[k] && (
+        <div style={{ color: 'var(--accent-red)', fontSize: '11px', fontWeight: 500, marginTop: '2px' }}>
+          {errors[k]}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const Select = ({ label, k, options, required = false }: any) => {
+  const { form, errors, set, validateField } = useContext(FormContext);
+  return (
+    <div className="form-group">
+      <label className={`form-label ${required ? 'required' : ''}`}>{label}</label>
+      <select
+        className={`form-select ${errors[k] ? 'error' : ''}`}
+        value={form[k]}
+        onChange={set(k)}
+        onBlur={() => validateField(k, form[k])}
+      >
+        <option value="">Select {label}</option>
+        {options.map((o: string) => <option key={o} value={o}>{o}</option>)}
+      </select>
+      {errors[k] && (
+        <div style={{ color: 'var(--accent-red)', fontSize: '11px', fontWeight: 500, marginTop: '2px' }}>
+          {errors[k]}
+        </div>
+      )}
+    </div>
+  );
+};
 
 const CONSTITUTIONS = ['Proprietorship','Partnership','LLP','Private Limited','Public Limited','OPC','Trust','Society'];
 const INDUSTRIES = ['Manufacturing','Trading','Services','Agriculture','Construction','Healthcare','Education','Technology','Hospitality','Real Estate','Transport','Finance','Retail','Food & Beverage','Other'];
@@ -240,37 +287,9 @@ export default function ClientCreate() {
     }
   };
 
-  const Field = ({ label, k, type = 'text', placeholder = '', required = false }: any) => (
-    <div className="form-group">
-      <label className={`form-label ${required ? 'required' : ''}`}>{label}</label>
-      <input type={type} className={`form-input ${errors[k] ? 'error' : ''}`} placeholder={placeholder}
-        value={(form as any)[k]} onChange={set(k)} onBlur={() => validateField(k, (form as any)[k])} />
-      {errors[k] && (
-        <div style={{ color: 'var(--accent-red)', fontSize: '11px', fontWeight: 500, marginTop: '2px' }}>
-          {errors[k]}
-        </div>
-      )}
-    </div>
-  );
-
-  const Select = ({ label, k, options, required = false }: any) => (
-    <div className="form-group">
-      <label className={`form-label ${required ? 'required' : ''}`}>{label}</label>
-      <select className={`form-select ${errors[k] ? 'error' : ''}`} value={(form as any)[k]} onChange={set(k)}
-        onBlur={() => validateField(k, (form as any)[k])}>
-        <option value="">Select {label}</option>
-        {options.map((o: string) => <option key={o} value={o}>{o}</option>)}
-      </select>
-      {errors[k] && (
-        <div style={{ color: 'var(--accent-red)', fontSize: '11px', fontWeight: 500, marginTop: '2px' }}>
-          {errors[k]}
-        </div>
-      )}
-    </div>
-  );
-
   return (
-    <div className="fade-in">
+    <FormContext.Provider value={{ form, errors, set, validateField }}>
+      <div className="fade-in">
       <div className="page-header">
         <div>
           <h1 className="page-title">Add New Client</h1>
@@ -394,5 +413,6 @@ export default function ClientCreate() {
         </div>
       </div>
     </div>
+    </FormContext.Provider>
   );
 }
