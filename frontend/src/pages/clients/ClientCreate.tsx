@@ -25,6 +25,83 @@ export default function ClientCreate() {
     promoterName: '', promoterExperience: '', existingBanker: '', existingLoanDetails: ''
   });
 
+  const validateField = (k: string, val: string) => {
+    let err = '';
+
+    if (k === 'name') {
+      if (!val.trim()) {
+        err = 'Client Full Name is required';
+      } else if (val.trim().length < 3) {
+        err = 'Name must be at least 3 characters';
+      }
+    }
+
+    if (k === 'mobile') {
+      if (!val.trim()) {
+        err = 'Mobile Number is required';
+      } else if (!/^[6-9]\d{9}$/.test(val.trim())) {
+        err = 'Enter a valid 10-digit mobile number';
+      }
+    }
+
+    if (k === 'email') {
+      if (val.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val.trim())) {
+        err = 'Enter a valid email address';
+      }
+    }
+
+    if (k === 'aadhaar') {
+      const cleanAadhaar = val.replace(/\s/g, '');
+      if (cleanAadhaar && !/^\d{12}$/.test(cleanAadhaar)) {
+        err = 'Aadhaar number must be exactly 12 digits';
+      }
+    }
+
+    if (k === 'pan') {
+      const panVal = val.trim().toUpperCase();
+      if (!panVal) {
+        err = 'PAN Number is required';
+      } else if (!/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(panVal)) {
+        err = 'Invalid PAN format (expected ABCDE1234F)';
+      }
+    }
+
+    if (k === 'gst') {
+      const gstVal = val.trim().toUpperCase();
+      if (gstVal && !/^\d{2}[A-Z]{5}\d{4}[A-Z]{1}[A-Z\d]{1}[Zz]{1}[A-Z\d]{1}$/.test(gstVal)) {
+        err = 'Invalid GST format (expected 22AAAAA0000A1Z5)';
+      }
+    }
+
+    if (k === 'pincode') {
+      if (val.trim() && !/^\d{6}$/.test(val.trim())) {
+        err = 'Pincode must be exactly 6 digits';
+      }
+    }
+
+    if (k === 'businessName') {
+      if (!val.trim()) {
+        err = 'Business / Firm Name is required';
+      }
+    }
+
+    if (k === 'constitution') {
+      if (!val) {
+        err = 'Constitution Type is required';
+      }
+    }
+
+    setErrors(prev => {
+      const next = { ...prev };
+      if (err) {
+        next[k] = err;
+      } else {
+        delete next[k];
+      }
+      return next;
+    });
+  };
+
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     let val = e.target.type === 'checkbox' ? (e.target as HTMLInputElement).checked : e.target.value;
     
@@ -35,13 +112,9 @@ export default function ClientCreate() {
     
     setForm(f => ({ ...f, [k]: val }));
     
-    // Clear error for this field
+    // If the field has an active error, re-validate on change to clear it if it becomes valid
     if (errors[k]) {
-      setErrors(errs => {
-        const next = { ...errs };
-        delete next[k];
-        return next;
-      });
+      validateField(k, val as string);
     }
   };
 
@@ -55,67 +128,80 @@ export default function ClientCreate() {
   const validateStep = (currentStep: number): boolean => {
     const stepErrors: Record<string, string> = {};
 
+    const checkField = (k: string, val: string) => {
+      let err = '';
+      if (k === 'name') {
+        if (!val.trim()) err = 'Client Full Name is required';
+        else if (val.trim().length < 3) err = 'Name must be at least 3 characters';
+      }
+      if (k === 'mobile') {
+        if (!val.trim()) err = 'Mobile Number is required';
+        else if (!/^[6-9]\d{9}$/.test(val.trim())) err = 'Enter a valid 10-digit mobile number';
+      }
+      if (k === 'email') {
+        if (val.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val.trim())) err = 'Enter a valid email address';
+      }
+      if (k === 'aadhaar') {
+        const cleanAadhaar = val.replace(/\s/g, '');
+        if (cleanAadhaar && !/^\d{12}$/.test(cleanAadhaar)) err = 'Aadhaar number must be exactly 12 digits';
+      }
+      if (k === 'pan') {
+        const panVal = val.trim().toUpperCase();
+        if (!panVal) err = 'PAN Number is required';
+        else if (!/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(panVal)) err = 'Invalid PAN format (expected ABCDE1234F)';
+      }
+      if (k === 'gst') {
+        const gstVal = val.trim().toUpperCase();
+        if (gstVal && !/^\d{2}[A-Z]{5}\d{4}[A-Z]{1}[A-Z\d]{1}[Zz]{1}[A-Z\d]{1}$/.test(gstVal)) err = 'Invalid GST format (expected 22AAAAA0000A1Z5)';
+      }
+      if (k === 'pincode') {
+        if (val.trim() && !/^\d{6}$/.test(val.trim())) err = 'Pincode must be exactly 6 digits';
+      }
+      if (k === 'businessName') {
+        if (!val.trim()) err = 'Business / Firm Name is required';
+      }
+      if (k === 'constitution') {
+        if (!val) err = 'Constitution Type is required';
+      }
+
+      if (err) {
+        stepErrors[k] = err;
+      }
+    };
+
     if (currentStep === 0) {
-      // Name validation
-      if (!form.name.trim()) {
-        stepErrors.name = 'Client Full Name is required';
-      } else if (form.name.trim().length < 3) {
-        stepErrors.name = 'Name must be at least 3 characters';
-      }
-
-      // Mobile validation
-      if (!form.mobile.trim()) {
-        stepErrors.mobile = 'Mobile Number is required';
-      } else if (!/^[6-9]\d{9}$/.test(form.mobile.trim())) {
-        stepErrors.mobile = 'Enter a valid 10-digit mobile number';
-      }
-
-      // Email validation (optional)
-      if (form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
-        stepErrors.email = 'Enter a valid email address';
-      }
-
-      // Aadhaar validation (optional)
-      const cleanAadhaar = form.aadhaar.replace(/\s/g, '');
-      if (cleanAadhaar && !/^\d{12}$/.test(cleanAadhaar)) {
-        stepErrors.aadhaar = 'Aadhaar number must be exactly 12 digits';
-      }
-
-      // PAN validation
-      const panVal = form.pan.trim().toUpperCase();
-      if (!panVal) {
-        stepErrors.pan = 'PAN Number is required';
-      } else if (!/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(panVal)) {
-        stepErrors.pan = 'Invalid PAN format (expected ABCDE1234F)';
-      }
-
-      // GST validation (optional)
-      const gstVal = form.gst.trim().toUpperCase();
-      if (gstVal && !/^\d{2}[A-Z]{5}\d{4}[A-Z]{1}[A-Z\d]{1}[Zz]{1}[A-Z\d]{1}$/.test(gstVal)) {
-        stepErrors.gst = 'Invalid GST format (expected 22AAAAA0000A1Z5)';
-      }
+      checkField('name', form.name);
+      checkField('mobile', form.mobile);
+      checkField('email', form.email);
+      checkField('aadhaar', form.aadhaar);
+      checkField('pan', form.pan);
+      checkField('gst', form.gst);
     }
-
     if (currentStep === 1) {
-      // Pincode validation (optional)
-      if (form.pincode.trim() && !/^\d{6}$/.test(form.pincode.trim())) {
-        stepErrors.pincode = 'Pincode must be exactly 6 digits';
-      }
+      checkField('pincode', form.pincode);
     }
-
     if (currentStep === 2) {
-      // Business Name validation
-      if (!form.businessName.trim()) {
-        stepErrors.businessName = 'Business / Firm Name is required';
-      }
-
-      // Constitution validation
-      if (!form.constitution) {
-        stepErrors.constitution = 'Constitution Type is required';
-      }
+      checkField('businessName', form.businessName);
+      checkField('constitution', form.constitution);
     }
 
-    setErrors(stepErrors);
+    setErrors(prev => {
+      const next = { ...prev };
+      const currentStepFields = 
+        currentStep === 0 ? ['name', 'mobile', 'email', 'aadhaar', 'pan', 'gst'] :
+        currentStep === 1 ? ['pincode'] :
+        currentStep === 2 ? ['businessName', 'constitution'] : [];
+
+      currentStepFields.forEach(f => {
+        if (stepErrors[f]) {
+          next[f] = stepErrors[f];
+        } else {
+          delete next[f];
+        }
+      });
+      return next;
+    });
+
     return Object.keys(stepErrors).length === 0;
   };
 
@@ -128,7 +214,6 @@ export default function ClientCreate() {
   const handleSubmit = async () => {
     setError('');
     
-    // Validate all steps
     const isStep0Valid = validateStep(0);
     const isStep1Valid = validateStep(1);
     const isStep2Valid = validateStep(2);
@@ -159,7 +244,7 @@ export default function ClientCreate() {
     <div className="form-group">
       <label className={`form-label ${required ? 'required' : ''}`}>{label}</label>
       <input type={type} className={`form-input ${errors[k] ? 'error' : ''}`} placeholder={placeholder}
-        value={(form as any)[k]} onChange={set(k)} />
+        value={(form as any)[k]} onChange={set(k)} onBlur={() => validateField(k, (form as any)[k])} />
       {errors[k] && (
         <div style={{ color: 'var(--accent-red)', fontSize: '11px', fontWeight: 500, marginTop: '2px' }}>
           {errors[k]}
@@ -171,7 +256,8 @@ export default function ClientCreate() {
   const Select = ({ label, k, options, required = false }: any) => (
     <div className="form-group">
       <label className={`form-label ${required ? 'required' : ''}`}>{label}</label>
-      <select className={`form-select ${errors[k] ? 'error' : ''}`} value={(form as any)[k]} onChange={set(k)}>
+      <select className={`form-select ${errors[k] ? 'error' : ''}`} value={(form as any)[k]} onChange={set(k)}
+        onBlur={() => validateField(k, (form as any)[k])}>
         <option value="">Select {label}</option>
         {options.map((o: string) => <option key={o} value={o}>{o}</option>)}
       </select>
