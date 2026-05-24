@@ -13,6 +13,7 @@ export default function ClientCreate() {
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   const [form, setForm] = useState({
     // Personal
@@ -25,8 +26,23 @@ export default function ClientCreate() {
   });
 
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    const val = e.target.type === 'checkbox' ? (e.target as HTMLInputElement).checked : e.target.value;
+    let val = e.target.type === 'checkbox' ? (e.target as HTMLInputElement).checked : e.target.value;
+    
+    // Auto-capitalize PAN and GST
+    if (k === 'pan' || k === 'gst') {
+      val = (val as string).toUpperCase();
+    }
+    
     setForm(f => ({ ...f, [k]: val }));
+    
+    // Clear error for this field
+    if (errors[k]) {
+      setErrors(errs => {
+        const next = { ...errs };
+        delete next[k];
+        return next;
+      });
+    }
   };
 
   const steps = [
@@ -36,8 +52,101 @@ export default function ClientCreate() {
     { label: 'Review', icon: '✅' },
   ];
 
+  const validateStep = (currentStep: number): boolean => {
+    const stepErrors: Record<string, string> = {};
+
+    if (currentStep === 0) {
+      // Name validation
+      if (!form.name.trim()) {
+        stepErrors.name = 'Client Full Name is required';
+      } else if (form.name.trim().length < 3) {
+        stepErrors.name = 'Name must be at least 3 characters';
+      }
+
+      // Mobile validation
+      if (!form.mobile.trim()) {
+        stepErrors.mobile = 'Mobile Number is required';
+      } else if (!/^[6-9]\d{9}$/.test(form.mobile.trim())) {
+        stepErrors.mobile = 'Enter a valid 10-digit mobile number';
+      }
+
+      // Email validation (optional)
+      if (form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
+        stepErrors.email = 'Enter a valid email address';
+      }
+
+      // Aadhaar validation (optional)
+      const cleanAadhaar = form.aadhaar.replace(/\s/g, '');
+      if (cleanAadhaar && !/^\d{12}$/.test(cleanAadhaar)) {
+        stepErrors.aadhaar = 'Aadhaar number must be exactly 12 digits';
+      }
+
+      // PAN validation
+      const panVal = form.pan.trim().toUpperCase();
+      if (!panVal) {
+        stepErrors.pan = 'PAN Number is required';
+      } else if (!/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(panVal)) {
+        stepErrors.pan = 'Invalid PAN format (expected ABCDE1234F)';
+      }
+
+      // GST validation (optional)
+      const gstVal = form.gst.trim().toUpperCase();
+      if (gstVal && !/^\d{2}[A-Z]{5}\d{4}[A-Z]{1}[A-Z\d]{1}[Zz]{1}[A-Z\d]{1}$/.test(gstVal)) {
+        stepErrors.gst = 'Invalid GST format (expected 22AAAAA0000A1Z5)';
+      }
+    }
+
+    if (currentStep === 1) {
+      // Pincode validation (optional)
+      if (form.pincode.trim() && !/^\d{6}$/.test(form.pincode.trim())) {
+        stepErrors.pincode = 'Pincode must be exactly 6 digits';
+      }
+    }
+
+    if (currentStep === 2) {
+      // Business Name validation
+      if (!form.businessName.trim()) {
+        stepErrors.businessName = 'Business / Firm Name is required';
+      }
+
+      // Constitution validation
+      if (!form.constitution) {
+        stepErrors.constitution = 'Constitution Type is required';
+      }
+    }
+
+    setErrors(stepErrors);
+    return Object.keys(stepErrors).length === 0;
+  };
+
+  const handleNext = () => {
+    if (validateStep(step)) {
+      setStep(s => s + 1);
+    }
+  };
+
   const handleSubmit = async () => {
-    setError(''); setLoading(true);
+    setError('');
+    
+    // Validate all steps
+    const isStep0Valid = validateStep(0);
+    const isStep1Valid = validateStep(1);
+    const isStep2Valid = validateStep(2);
+    
+    if (!isStep0Valid) {
+      setStep(0);
+      return;
+    }
+    if (!isStep1Valid) {
+      setStep(1);
+      return;
+    }
+    if (!isStep2Valid) {
+      setStep(2);
+      return;
+    }
+
+    setLoading(true);
     try {
       const client = await api.clients.create({ ...form, userId: user?.uid });
       navigate(`/clients/${client.id}`);
@@ -49,18 +158,28 @@ export default function ClientCreate() {
   const Field = ({ label, k, type = 'text', placeholder = '', required = false }: any) => (
     <div className="form-group">
       <label className={`form-label ${required ? 'required' : ''}`}>{label}</label>
-      <input type={type} className="form-input" placeholder={placeholder}
+      <input type={type} className={`form-input ${errors[k] ? 'error' : ''}`} placeholder={placeholder}
         value={(form as any)[k]} onChange={set(k)} />
+      {errors[k] && (
+        <div style={{ color: 'var(--accent-red)', fontSize: '11px', fontWeight: 500, marginTop: '2px' }}>
+          {errors[k]}
+        </div>
+      )}
     </div>
   );
 
   const Select = ({ label, k, options, required = false }: any) => (
     <div className="form-group">
       <label className={`form-label ${required ? 'required' : ''}`}>{label}</label>
-      <select className="form-select" value={(form as any)[k]} onChange={set(k)}>
+      <select className={`form-select ${errors[k] ? 'error' : ''}`} value={(form as any)[k]} onChange={set(k)}>
         <option value="">Select {label}</option>
         {options.map((o: string) => <option key={o} value={o}>{o}</option>)}
       </select>
+      {errors[k] && (
+        <div style={{ color: 'var(--accent-red)', fontSize: '11px', fontWeight: 500, marginTop: '2px' }}>
+          {errors[k]}
+        </div>
+      )}
     </div>
   );
 
@@ -177,12 +296,11 @@ export default function ClientCreate() {
           </button>
           <div style={{ display: 'flex', gap: 10 }}>
             {step < steps.length - 1 ? (
-              <button className="btn btn-primary" onClick={() => setStep(s => s + 1)}
-                disabled={step === 0 && !form.name}>
+              <button className="btn btn-primary" onClick={handleNext}>
                 Continue →
               </button>
             ) : (
-              <button className="btn btn-success" onClick={handleSubmit} disabled={loading || !form.name || !form.pan}>
+              <button className="btn btn-success" onClick={handleSubmit} disabled={loading}>
                 {loading ? <><span className="spinner" />Saving...</> : '✓ Save Client'}
               </button>
             )}
