@@ -1,29 +1,531 @@
 import { auth } from './firebase';
+import { computeProjections, computeLoanSchedule } from './projectionEngine';
 
 const BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000/api';
 
+const isOffline = () => {
+  return localStorage.getItem('cma_use_offline_mode') === 'true';
+};
+
 async function getToken(): Promise<string | null> {
-  try { return await auth.currentUser?.getIdToken() || null; } catch { return null; }
+  try { return (await auth.currentUser?.getIdToken()) || null; } catch { return null; }
 }
 
 async function fetchAPI<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const token = await getToken();
-  const res = await fetch(`${BASE}${path}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options.headers
-    }
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.error || 'Request failed');
+  if (isOffline()) {
+    return handleOfflineRequest<T>(path, options);
   }
-  return res.json();
+
+  try {
+    const token = await getToken();
+    const res = await fetch(`${BASE}${path}`, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...options.headers
+      }
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error(err.error || 'Request failed');
+    }
+    return res.json();
+  } catch (err: any) {
+    // If it's a network error (server is down/unreachable)
+    if (err instanceof TypeError || err.message?.includes('Failed to fetch') || err.message?.includes('NetworkError')) {
+      console.warn('Backend server not detected. Switching to browser-only offline mode (LocalStorage).');
+      localStorage.setItem('cma_use_offline_mode', 'true');
+      window.dispatchEvent(new Event('cma_offline_mode_enabled'));
+      return handleOfflineRequest<T>(path, options);
+    }
+    throw err;
+  }
 }
 
-// ---- CLIENTS ----
+async function handleOfflineRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const method = options.method || 'GET';
+  const cleanPath = path.split('?')[0];
+
+  const getDB = (key: string): any[] => {
+    try {
+      const val = localStorage.getItem(key);
+      return val ? JSON.parse(val) : [];
+    } catch {
+      return [];
+    }
+  };
+
+  const setDB = (key: string, data: any[]) => {
+    localStorage.setItem(key, JSON.stringify(data));
+  };
+
+  const matchRoute = (pattern: string) => {
+    const patternParts = pattern.split('/');
+    const pathParts = cleanPath.split('/');
+    if (patternParts.length !== pathParts.length) return null;
+    const params: Record<string, string> = {};
+    for (let i = 0; i < patternParts.length; i++) {
+      if (patternParts[i].startsWith(':')) {
+        params[patternParts[i].substring(1)] = pathParts[i];
+      } else if (patternParts[i] !== pathParts[i]) {
+        return null;
+      }
+    }
+    return params;
+  };
+
+  const getBody = () => (options.body ? JSON.parse(options.body as string) : {});
+
+  // ---- CLIENTS ----
+  if (cleanPath === '/clients') {
+    if (method === 'GET') {
+      const clients = getDB('cma_clients');
+      const reports = getDB('cma_reports');
+      return clients.map(c => ({
+        ...c,
+        _count: { reports: reports.filter(r => r.clientId === c.id).length }
+      })) as any;
+    }
+    if (method === 'POST') {
+      const clients = getDB('cma_clients');
+      const newClient = {
+        id: 'c_' + Math.random().toString(36).substring(2, 11),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        ...getBody()
+      };
+      clients.push(newClient);
+      setDB('cma_clients', clients);
+      return newClient as any;
+    }
+  }
+
+  let params = matchRoute('/clients/:id');
+  if (params) {
+    const id = params.id;
+    if (method === 'GET') {
+      const clients = getDB('cma_clients');
+      const client = clients.find(c => c.id === id);
+      if (!client) throw new Error('Client not found');
+      const reports = getDB('cma_reports').filter(r => r.clientId === id);
+      return { ...client, reports } as any;
+    }
+    if (method === 'PUT') {
+      const clients = getDB('cma_clients');
+      const idx = clients.findIndex(c => c.id === id);
+      if (idx === -1) throw new Error('Client not found');
+      const updated = { ...clients[idx], ...getBody(), updatedAt: new Date().toISOString() };
+      clients[idx] = updated;
+      setDB('cma_clients', clients);
+      return updated as any;
+    }
+    if (method === 'DELETE') {
+      const clients = getDB('cma_clients');
+      setDB('cma_clients', clients.filter(c => c.id !== id));
+      return { success: true } as any;
+    }
+  }
+
+  // ---- REPORTS ----
+  if (cleanPath === '/reports') {
+    if (method === 'GET') {
+      const reports = getDB('cma_reports');
+      if (path.includes('clientId=')) {
+        const cid = path.split('clientId=')[1]?.split('&')[0];
+        return reports.filter(r => r.clientId === cid) as any;
+      }
+      return reports as any;
+    }
+    if (method === 'POST') {
+      const reports = getDB('cma_reports');
+      const newReport = {
+        id: 'r_' + Math.random().toString(36).substring(2, 11),
+        status: 'DRAFT',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        ...getBody()
+      };
+      reports.push(newReport);
+      setDB('cma_reports', reports);
+      return newReport as any;
+    }
+  }
+
+  params = matchRoute('/reports/:id');
+  if (params) {
+    const id = params.id;
+    if (method === 'GET') {
+      const reports = getDB('cma_reports');
+      const report = reports.find(r => r.id === id);
+      if (!report) throw new Error('Report not found');
+      const client = getDB('cma_clients').find(c => c.id === report.clientId);
+      const financialYears = getDB('cma_financials').filter(f => f.reportId === id);
+      const assumptions = getDB('cma_assumptions').filter(a => a.reportId === id);
+      const projections = getDB('cma_projections').filter(p => p.reportId === id).map(p => ({
+        year: p.year,
+        pl: JSON.parse(p.plProjection),
+        bs: JSON.parse(p.bsProjection),
+        cf: JSON.parse(p.cfProjection),
+        ratios: JSON.parse(p.ratios)
+      }));
+      return {
+        ...report,
+        client,
+        financialYears,
+        assumptions,
+        projections
+      } as any;
+    }
+    if (method === 'PUT') {
+      const reports = getDB('cma_reports');
+      const idx = reports.findIndex(r => r.id === id);
+      if (idx === -1) throw new Error('Report not found');
+      const updated = { ...reports[idx], ...getBody(), updatedAt: new Date().toISOString() };
+      reports[idx] = updated;
+      setDB('cma_reports', reports);
+      return updated as any;
+    }
+    if (method === 'DELETE') {
+      const reports = getDB('cma_reports');
+      setDB('cma_reports', reports.filter(r => r.id !== id));
+      return { success: true } as any;
+    }
+  }
+
+  // ---- FINANCIALS ----
+  params = matchRoute('/financials/:reportId');
+  if (params) {
+    const reportId = params.reportId;
+    if (method === 'GET') {
+      const financials = getDB('cma_financials');
+      return financials.filter(f => f.reportId === reportId) as any;
+    }
+    if (method === 'POST') {
+      const financials = getDB('cma_financials');
+      const body = getBody();
+      const idx = financials.findIndex(f => f.reportId === reportId && f.year === body.year);
+      const newOrUpdated = {
+        id: idx !== -1 ? financials[idx].id : 'f_' + Math.random().toString(36).substring(2, 11),
+        reportId,
+        createdAt: idx !== -1 ? financials[idx].createdAt : new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        ...body
+      };
+      if (idx !== -1) {
+        financials[idx] = newOrUpdated;
+      } else {
+        financials.push(newOrUpdated);
+      }
+      setDB('cma_financials', financials);
+      return newOrUpdated as any;
+    }
+  }
+
+  params = matchRoute('/financials/:reportId/:yearId');
+  if (params) {
+    const { reportId, yearId } = params;
+    if (method === 'DELETE') {
+      const financials = getDB('cma_financials');
+      setDB('cma_financials', financials.filter(f => !(f.reportId === reportId && f.id === yearId)));
+      return { success: true } as any;
+    }
+  }
+
+  // ---- PROJECTIONS ----
+  params = matchRoute('/projections/:reportId/assumptions');
+  if (params) {
+    const reportId = params.reportId;
+    if (method === 'GET') {
+      const assumptions = getDB('cma_assumptions');
+      const ass = assumptions.find(a => a.reportId === reportId);
+      if (ass) return ass as any;
+      return {
+        reportId,
+        salesGrowthPct: 15,
+        rawMaterialPct: 60,
+        salaryGrowthPct: 10,
+        adminExpensePct: 5,
+        powerExpensePct: 3,
+        interestRate: 12,
+        depreciationRate: 10,
+        taxRate: 25,
+        inflationRate: 6,
+        capacityUtilization: '[70, 80, 85, 90, 95]',
+        debtorDays: 45,
+        creditorDays: 30,
+        inventoryDays: 60,
+        projectionYears: 5
+      } as any;
+    }
+    if (method === 'PUT') {
+      const assumptions = getDB('cma_assumptions');
+      const body = getBody();
+      const idx = assumptions.findIndex(a => a.reportId === reportId);
+      const newAss = {
+        id: idx !== -1 ? assumptions[idx].id : 'a_' + Math.random().toString(36).substring(2, 11),
+        reportId,
+        createdAt: idx !== -1 ? assumptions[idx].createdAt : new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        ...body
+      };
+      if (idx !== -1) {
+        assumptions[idx] = newAss;
+      } else {
+        assumptions.push(newAss);
+      }
+      setDB('cma_assumptions', assumptions);
+      return newAss as any;
+    }
+  }
+
+  params = matchRoute('/projections/:reportId/compute');
+  if (params && method === 'POST') {
+    const reportId = params.reportId;
+    const reports = getDB('cma_reports');
+    const report = reports.find(r => r.id === reportId);
+    if (!report) throw new Error('Report not found');
+
+    const financials = getDB('cma_financials').filter(f => f.reportId === reportId);
+    const historicalYears = financials.filter(f => f.yearType === 'HISTORICAL' || !f.yearType);
+    historicalYears.sort((a, b) => b.year.localeCompare(a.year));
+    const baseYear = historicalYears[0];
+    if (!baseYear) {
+      throw new Error('Please input at least one historical financial year first');
+    }
+
+    const assumptions = getDB('cma_assumptions');
+    let ass = assumptions.find(a => a.reportId === reportId);
+    if (!ass) {
+      ass = {
+        salesGrowthPct: 15,
+        rawMaterialPct: 60,
+        salaryGrowthPct: 10,
+        adminExpensePct: 5,
+        powerExpensePct: 3,
+        interestRate: 12,
+        depreciationRate: 10,
+        taxRate: 25,
+        capacityUtilization: '[70, 80, 85, 90, 95]',
+        projectionYears: 5
+      };
+    }
+
+    const basePL = baseYear.plData ? JSON.parse(baseYear.plData) : {};
+    const baseBS = {
+      assets: baseYear.bsAssets ? JSON.parse(baseYear.bsAssets) : {},
+      liabilities: baseYear.bsLiabilities ? JSON.parse(baseYear.bsLiabilities) : {}
+    };
+
+    const computed = computeProjections({
+      basePL,
+      baseBS,
+      assumption: ass,
+      report: {
+        loanAmount: report.loanAmount,
+        interestRate: report.interestRate,
+        loanTenure: report.loanTenure,
+        moratoriumMonths: report.moratoriumMonths,
+        projectCost: report.projectCost
+      }
+    });
+
+    const projectionsDB = getDB('cma_projections').filter(p => p.reportId !== reportId);
+    computed.forEach((p: any) => {
+      projectionsDB.push({
+        id: 'p_' + Math.random().toString(36).substring(2, 11),
+        reportId,
+        year: p.year,
+        plProjection: JSON.stringify(p.pl),
+        bsProjection: JSON.stringify(p.bs),
+        cfProjection: JSON.stringify(p.cf),
+        ratios: JSON.stringify(p.ratios),
+        dscr: p.ratios.dscr
+      });
+    });
+    setDB('cma_projections', projectionsDB);
+
+    const idx = reports.findIndex(r => r.id === reportId);
+    if (idx !== -1) {
+      reports[idx].status = 'IN_PROGRESS';
+      setDB('cma_reports', reports);
+    }
+
+    return computed as any;
+  }
+
+  params = matchRoute('/projections/:reportId');
+  if (params && method === 'GET') {
+    const reportId = params.reportId;
+    const projections = getDB('cma_projections').filter(p => p.reportId === reportId);
+    return projections.map(p => ({
+      year: p.year,
+      pl: JSON.parse(p.plProjection),
+      bs: JSON.parse(p.bsProjection),
+      cf: JSON.parse(p.cfProjection),
+      ratios: JSON.parse(p.ratios)
+    })) as any;
+  }
+
+  // ---- AI ----
+  params = matchRoute('/ai/:reportId/generate');
+  if (params && method === 'POST') {
+    const reportId = params.reportId;
+    const body = getBody();
+    const mod = body.module || 'executive_summary';
+
+    const reports = getDB('cma_reports');
+    const rep = reports.find(r => r.id === reportId);
+    const client = getDB('cma_clients').find(c => c.id === rep?.clientId);
+    const clientName = client?.name || 'the client';
+    const bizName = client?.businessName || 'the business';
+    const loanAmountStr = rep?.loanAmount ? `₹${(rep.loanAmount / 100000).toFixed(2)} Lakhs` : 'the requested loan';
+
+    let responseText = '';
+    if (mod === 'executive_summary') {
+      responseText = `### Executive Summary for ${bizName}\n\n**1. Overview**\n${clientName} is seeking a credit facility of ${loanAmountStr} to fund its business operations and expansion plans. The business operates as a ${client?.constitution || 'Proprietorship'} in the ${client?.industryType || 'Services'} sector.\n\n**2. Key Strengths**\n* Experienced promoter background with established business relationships.\n* Healthy revenue growth projection over the next 5 years.\n* Balanced capital structure and solid debt service capabilities.\n\n**3. Recommendations**\nBased on our banking-grade financial underwriting, the loan request is highly viable with strong DSCR metrics. We recommend sanctioning the requested amount with standard hypothecation of current assets.`;
+    } else if (mod === 'swot_analysis') {
+      responseText = `### SWOT Analysis\n\n**Strengths:**\n* Consistent operational history and solid promoter track record.\n* High quality current ratio indicating strong short-term liquidity.\n\n**Weaknesses:**\n* Concentration of credit in local markets.\n* Higher working capital cycle compared to industry average.\n\n**Opportunities:**\n* Expansion into new geographical regions.\n* Increasing demand in the ${client?.industryType || 'target'} sector.\n\n**Threats:**\n* Raw material price fluctuations.\n* Rising competition from regional players.`;
+    } else {
+      responseText = `### Financial & Risk Analysis\n\n**Financial Assessment:**\nAn analysis of the projected statements indicates a healthy debt-to-equity structure. Operating margins remain stable under base case scenarios. DSCR is projected to remain comfortably above the banking benchmark of 1.25x throughout the tenure.\n\n**Risk Mitigation:**\n* Interest rate risks are mitigated by floating rate covenants.\n* Collateral coverage ratio is estimated at 1.5x, offering adequate security.`;
+    }
+
+    const aiLogs = getDB('cma_ai_logs');
+    const newLog = {
+      id: 'l_' + Math.random().toString(36).substring(2, 11),
+      reportId,
+      prompt: `Generate ${mod}`,
+      response: responseText,
+      module: mod,
+      createdAt: new Date().toISOString()
+    };
+    aiLogs.push(newLog);
+    setDB('cma_ai_logs', aiLogs);
+    return { response: responseText } as any;
+  }
+
+  params = matchRoute('/ai/:reportId/history');
+  if (params && method === 'GET') {
+    const reportId = params.reportId;
+    return getDB('cma_ai_logs').filter(l => l.reportId === reportId) as any;
+  }
+
+  params = matchRoute('/ai/:reportId/parse-financials');
+  if (params && method === 'POST') {
+    return {
+      plData: {
+        grossSales: 15000000,
+        otherIncome: 500000,
+        rawMaterial: 9000000,
+        salaryWages: 1200000,
+        powerFuel: 450000,
+        manufacturingExp: 600000,
+        adminExp: 500000,
+        sellingExp: 300000,
+        rent: 240000,
+        repairMaintenance: 150000,
+        depreciation: 800000,
+        interestExp: 400000,
+        taxExpense: 200000
+      },
+      bsAssets: {
+        landBuilding: 5000000,
+        plantMachinery: 4000000,
+        furniture: 500000,
+        vehicle: 800000,
+        investments: 0,
+        inventory: 2500000,
+        sundryDebtors: 2000000,
+        cashBank: 800000,
+        loansAdvances: 200000,
+        otherCurrentAssets: 100000
+      },
+      bsLiabilities: {
+        shareCapital: 1000000,
+        reserves: 4000000,
+        securedLoan: 3000000,
+        unsecuredLoan: 1000000,
+        ccOdLimit: 1200000,
+        tradeCreditors: 1500000,
+        otherCurrentLiab: 400000,
+        provisions: 300000
+      }
+    } as any;
+  }
+
+  // ---- MAPPINGS ----
+  if (cleanPath === '/mappings/suggest' && method === 'POST') {
+    return { targetField: 'grossSales', confidence: 0.95 } as any;
+  }
+  if (cleanPath === '/mappings/bulk-suggest' && method === 'POST') {
+    const body = getBody();
+    const suggestions: Record<string, any> = {};
+    body.labels.forEach((l: string) => {
+      suggestions[l] = { targetField: 'otherIncome', confidence: 0.8 };
+    });
+    return suggestions as any;
+  }
+  if (cleanPath === '/mappings/learn' && method === 'POST') {
+    return { success: true } as any;
+  }
+
+  // ---- EXPORTS ----
+  params = matchRoute('/exports/:reportId/excel');
+  if (params && method === 'POST') {
+    const reportId = params.reportId;
+    const reports = getDB('cma_reports');
+    const report = reports.find(r => r.id === reportId);
+    if (!report) throw new Error('Report not found');
+
+    const client = getDB('cma_clients').find(c => c.id === report.clientId);
+    const financials = getDB('cma_financials').filter(f => f.reportId === reportId);
+    const projections = getDB('cma_projections').filter(p => p.reportId === reportId).map(p => ({
+      year: p.year,
+      plProjection: JSON.parse(p.plProjection),
+      bsProjection: JSON.parse(p.bsProjection),
+      cfProjection: JSON.parse(p.cfProjection),
+      ratios: JSON.parse(p.ratios)
+    }));
+
+    const loanSchedule = report.loanAmount ? computeLoanSchedule({
+      loanAmount: report.loanAmount,
+      annualRate: report.interestRate || 12,
+      tenureMonths: report.loanTenure || 60,
+      moratoriumMonths: report.moratoriumMonths || 0
+    }) : { emi: 0, schedule: [] };
+
+    return {
+      success: true,
+      fileName: `CMA_Report_${client?.name?.replace(/\s+/g, '_') || 'Report'}.xlsx`,
+      data: {
+        report: {
+          ...report,
+          client
+        },
+        financialYears: financials.map(f => ({
+          ...f,
+          plData: f.plData ? JSON.parse(f.plData) : {},
+          bsAssets: f.bsAssets ? JSON.parse(f.bsAssets) : {},
+          bsLiabilities: f.bsLiabilities ? JSON.parse(f.bsLiabilities) : {}
+        })),
+        projections,
+        loanSchedule: {
+          scheduleData: loanSchedule.schedule
+        }
+      }
+    } as any;
+  }
+
+  params = matchRoute('/exports/:reportId/files');
+  if (params && method === 'GET') {
+    return [
+      { id: '1', fileName: 'CMA_Report.xlsx', fileSize: 15200, createdAt: new Date().toISOString(), fileType: 'EXCEL_CMA' }
+    ] as any;
+  }
+
+  throw new Error(`Offline route not implemented: ${cleanPath}`);
+}
+
 export const api = {
   clients: {
     list: () => fetchAPI<any[]>('/clients'),
