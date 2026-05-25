@@ -117,7 +117,7 @@ export default function Dashboard() {
               </div>
             ) : (
               <table className="data-table">
-                <thead><tr><th>Name</th><th>PAN</th><th>Reports</th></tr></thead>
+                <thead><tr><th>Name</th><th>PAN</th><th>Handled By</th><th>Reports</th></tr></thead>
                 <tbody>
                   {recentClients.map(c => (
                     <tr key={c.id} style={{ cursor: 'pointer' }} onClick={() => navigate(`/clients/${c.id}`)}>
@@ -126,6 +126,9 @@ export default function Dashboard() {
                         <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{c.businessName || c.industryType || '—'}</div>
                       </td>
                       <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{c.pan || '—'}</td>
+                      <td>
+                        <div style={{ fontWeight: 500, fontSize: 12 }}>{c.user?.displayName || c.user?.name || 'Local Dev'}</div>
+                      </td>
                       <td><span className="badge badge-blue">{c._count?.reports || 0}</span></td>
                     </tr>
                   ))}
@@ -146,7 +149,7 @@ export default function Dashboard() {
               <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)' }}>No reports yet.</div>
             ) : (
               <table className="data-table">
-                <thead><tr><th>Title</th><th>Type</th><th>Status</th></tr></thead>
+                <thead><tr><th>Title</th><th>Type</th><th>Handled By</th><th>Status</th></tr></thead>
                 <tbody>
                   {recentReports.map(r => (
                     <tr key={r.id} style={{ cursor: 'pointer' }} onClick={() => navigate(`/reports/${r.id}`)}>
@@ -155,6 +158,9 @@ export default function Dashboard() {
                         <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{r.client?.name}</div>
                       </td>
                       <td><span className="badge badge-blue" style={{ fontSize: 10 }}>{r.reportType}</span></td>
+                      <td>
+                        <div style={{ fontWeight: 500, fontSize: 12 }}>{r.user?.displayName || r.user?.name || 'Local Dev'}</div>
+                      </td>
                       <td>{statusBadge(r.status)}</td>
                     </tr>
                   ))}

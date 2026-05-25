@@ -77,6 +77,7 @@ export default function ClientList() {
                   <th>PAN / GST</th>
                   <th>Industry</th>
                   <th>Reports</th>
+                  <th>Handled By</th>
                   <th>Added</th>
                   <th style={{ width: 100 }}>Actions</th>
                 </tr>
@@ -108,6 +109,10 @@ export default function ClientList() {
                     </td>
                     <td onClick={() => navigate(`/clients/${client.id}`)}>
                       <span className="badge badge-purple">{client._count?.reports || 0} reports</span>
+                    </td>
+                    <td onClick={() => navigate(`/clients/${client.id}`)}>
+                      <div style={{ fontWeight: 500, fontSize: 13 }}>{client.user?.displayName || client.user?.name || 'Local Dev'}</div>
+                      <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>{client.user?.email || ''}</div>
                     </td>
                     <td style={{ fontSize: 12, color: 'var(--text-muted)' }} onClick={() => navigate(`/clients/${client.id}`)}>
                       {new Date(client.createdAt).toLocaleDateString('en-IN')}

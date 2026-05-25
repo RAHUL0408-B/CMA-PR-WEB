@@ -9,7 +9,10 @@ router.get('/', async (req, res) => {
     // No userId filter - all users see all clients (shared platform)
     const clients = await prisma.client.findMany({
       orderBy: { createdAt: 'desc' },
-      include: { _count: { select: { reports: true } } }
+      include: {
+        _count: { select: { reports: true } },
+        user: { select: { name: true, displayName: true, email: true } }
+      }
     });
     res.json(clients);
   } catch (err: any) {

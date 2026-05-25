@@ -59,7 +59,7 @@ export default function ReportList() {
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Report</th><th>Client</th><th>Type</th><th>Loan Amount</th><th>Status</th><th>Updated</th><th>Action</th>
+                  <th>Report</th><th>Client</th><th>Type</th><th>Loan Amount</th><th>Handled By</th><th>Status</th><th>Updated</th><th>Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -73,6 +73,10 @@ export default function ReportList() {
                     <td><span className="badge badge-blue" style={{fontSize:10}}>{r.reportType?.replace(/_/g,' ')}</span></td>
                     <td style={{fontFamily:'monospace'}}>
                       {r.loanAmount ? `₹${Number(r.loanAmount).toLocaleString('en-IN')} L` : '—'}
+                    </td>
+                    <td>
+                      <div style={{ fontWeight: 500, fontSize: 13 }}>{r.user?.displayName || r.user?.name || 'Local Dev'}</div>
+                      <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>{r.user?.email || ''}</div>
                     </td>
                     <td>{statusBadge(r.status)}</td>
                     <td style={{fontSize:12,color:'var(--text-muted)'}}>

@@ -18,7 +18,8 @@ router.get('/', async (req, res) => {
       where,
       include: {
         client: { select: { name: true, businessName: true } },
-        _count: { select: { financialYears: true, generatedFiles: true } }
+        _count: { select: { financialYears: true, generatedFiles: true } },
+        user: { select: { name: true, displayName: true, email: true } }
       },
       orderBy: { updatedAt: 'desc' }
     });
