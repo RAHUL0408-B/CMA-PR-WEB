@@ -6,22 +6,13 @@ const router = Router();
 // GET /api/reports
 router.get('/', async (req, res) => {
   try {
-    const { clientId, userId } = req.query;
+    const { clientId } = req.query;
     const where: any = {};
     
     if (clientId) {
       where.clientId = String(clientId);
     }
-    
-    if (userId) {
-      let user = await prisma.user.findFirst({ where: { firebaseUid: String(userId) } });
-      if (!user) {
-        user = await prisma.user.create({
-          data: { firebaseUid: String(userId), email: `${userId}@cma.local`, name: 'App User' }
-        });
-      }
-      where.userId = user.id;
-    }
+    // No userId filter - all users see all reports (shared platform)
 
     const reports = await prisma.report.findMany({
       where,

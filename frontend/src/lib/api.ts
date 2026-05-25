@@ -127,11 +127,11 @@ async function handleOfflineRequest<T>(path: string, options: RequestInit = {}):
       const clients = getDB('cma_clients');
       const reports = getDB('cma_reports');
       
+      // Show ALL clients to all users (shared platform)
       let filtered = clients;
-      if (path.includes('userId=')) {
-        const uid = path.split('userId=')[1]?.split('&')[0];
-        // Strict filter: only show clients belonging to this user
-        filtered = clients.filter(c => c.userId === uid);
+      if (path.includes('clientId=')) {
+        const cid = path.split('clientId=')[1]?.split('&')[0];
+        filtered = clients.filter(c => c.id === cid);
       }
 
       return filtered.map(c => ({
@@ -189,11 +189,7 @@ async function handleOfflineRequest<T>(path: string, options: RequestInit = {}):
         const cid = path.split('clientId=')[1]?.split('&')[0];
         filtered = filtered.filter(r => r.clientId === cid);
       }
-      if (path.includes('userId=')) {
-        const uid = path.split('userId=')[1]?.split('&')[0];
-        // Strict filter: only show reports belonging to this user
-        filtered = filtered.filter(r => r.userId === uid);
-      }
+      // No userId filter - show ALL reports to all users (shared platform)
       
       const clients = getDB('cma_clients');
       const withClientInfo = filtered.map(r => {

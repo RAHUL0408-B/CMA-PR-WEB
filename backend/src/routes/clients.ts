@@ -6,21 +6,8 @@ const router = Router();
 // GET /api/clients
 router.get('/', async (req, res) => {
   try {
-    const { userId } = req.query;
-    const where: any = {};
-    
-    if (userId) {
-      let user = await prisma.user.findFirst({ where: { firebaseUid: String(userId) } });
-      if (!user) {
-        user = await prisma.user.create({
-          data: { firebaseUid: String(userId), email: `${userId}@cma.local`, name: 'App User' }
-        });
-      }
-      where.userId = user.id;
-    }
-
+    // No userId filter - all users see all clients (shared platform)
     const clients = await prisma.client.findMany({
-      where,
       orderBy: { createdAt: 'desc' },
       include: { _count: { select: { reports: true } } }
     });
