@@ -9,11 +9,16 @@ const port = process.env.PORT || 4000;
 
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow localhost on any port and no origin (same-origin)
-    if (!origin || origin.startsWith('http://localhost') || origin.startsWith('http://127.0.0.1')) {
+    // Allow localhost, the frontend env URL, and Netlify deploys
+    if (!origin || 
+        origin.startsWith('http://localhost') || 
+        origin.startsWith('http://127.0.0.1') || 
+        origin === process.env.FRONTEND_URL ||
+        origin === 'https://cmaweb.netlify.app' ||
+        origin.endsWith('.netlify.app')) {
       callback(null, true);
     } else {
-      callback(null, origin === process.env.FRONTEND_URL);
+      callback(null, false);
     }
   }
 }));
