@@ -1,19 +1,21 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../../lib/api';
+import { useAuth } from '../../context/AuthContext';
 
 export default function ClientList() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [clients, setClients] = useState<any[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState<string | null>(null);
 
-  useEffect(() => { fetchClients(); }, []);
+  useEffect(() => { fetchClients(); }, [user?.uid]);
 
   const fetchClients = () => {
     setLoading(true);
-    api.clients.list().then(setClients).catch(console.error).finally(() => setLoading(false));
+    api.clients.list(user?.uid).then(setClients).catch(console.error).finally(() => setLoading(false));
   };
 
   const handleDelete = async (id: string, name: string) => {

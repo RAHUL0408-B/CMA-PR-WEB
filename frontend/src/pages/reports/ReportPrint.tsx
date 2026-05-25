@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { api } from '../../lib/api';
+import { api, safeParseJSON } from '../../lib/api';
 
 const fmt = (n: any, dp = 2) => {
   const num = Number(n);
@@ -55,19 +55,19 @@ export default function ReportPrint() {
     const historical = (report.financialYears || []).map((y: any) => ({
       year: y.year,
       type: 'HISTORICAL',
-      pl: y.plData ? JSON.parse(y.plData) : {},
-      assets: y.bsAssets ? JSON.parse(y.bsAssets) : {},
-      liabilities: y.bsLiabilities ? JSON.parse(y.bsLiabilities) : {},
-      ratios: y.calculatedRatios ? JSON.parse(y.calculatedRatios) : {}
+      pl: y.plData ? safeParseJSON(y.plData) : {},
+      assets: y.bsAssets ? safeParseJSON(y.bsAssets) : {},
+      liabilities: y.bsLiabilities ? safeParseJSON(y.bsLiabilities) : {},
+      ratios: y.calculatedRatios ? safeParseJSON(y.calculatedRatios) : {}
     }));
     
     const projected = (projectionsData.projections || []).map((p: any) => ({
       year: p.year,
       type: 'PROJECTED',
-      pl: p.plProjection ? JSON.parse(p.plProjection) : {},
-      assets: p.bsProjection ? JSON.parse(p.bsProjection) : {},
-      liabilities: p.bsProjection ? JSON.parse(p.bsProjection) : {},
-      ratios: p.ratios ? JSON.parse(p.ratios) : {}
+      pl: p.plProjection ? safeParseJSON(p.plProjection) : {},
+      assets: p.bsProjection ? safeParseJSON(p.bsProjection) : {},
+      liabilities: p.bsProjection ? safeParseJSON(p.bsProjection) : {},
+      ratios: p.ratios ? safeParseJSON(p.ratios) : {}
     }));
 
     return [...historical, ...projected];
@@ -76,12 +76,12 @@ export default function ReportPrint() {
   // Project Cost & Means of Finance parsing
   const projectCost = useMemo(() => {
     if (!report?.projectCost) return {};
-    return typeof report.projectCost === 'string' ? JSON.parse(report.projectCost) : report.projectCost;
+    return typeof report.projectCost === 'string' ? safeParseJSON(report.projectCost) : report.projectCost;
   }, [report]);
 
   const meansOfFinance = useMemo(() => {
     if (!report?.meansOfFinance) return {};
-    return typeof report.meansOfFinance === 'string' ? JSON.parse(report.meansOfFinance) : report.meansOfFinance;
+    return typeof report.meansOfFinance === 'string' ? safeParseJSON(report.meansOfFinance) : report.meansOfFinance;
   }, [report]);
 
   const totalProjectCost = useMemo(() => {
@@ -1097,72 +1097,72 @@ export default function ReportPrint() {
           </thead>
           <tbody>
             <tr>
-              <td>1. Total Current Assets (TCA)</td>
-              {projectionsData.projections?.map((p: any) => {
-                const bs = p.bsProjection ? JSON.parse(p.bsProjection) : {};
-                const inv = Number(bs.assets?.inventory) || 0;
-                const debtors = Number(bs.assets?.sundryDebtors) || 0;
-                const cash = Number(bs.assets?.cashBank) || 0;
-                const loans = Number(bs.assets?.loansAdvances) || 0;
-                const oca = Number(bs.assets?.otherCurrentAssets) || 0;
-                return <td key={p.year} style={{ textAlign: 'right' }}>{fmt(inv + debtors + cash + loans + oca)}</td>;
-              })}
-            </tr>
-            <tr>
-              <td>2. Current Liabilities (Excluding Bank Borrowings)</td>
-              {projectionsData.projections?.map((p: any) => {
-                const bs = p.bsProjection ? JSON.parse(p.bsProjection) : {};
-                const cred = Number(bs.liabilities?.tradeCreditors) || 0;
-                const ocl = Number(bs.liabilities?.otherCurrentLiab) || 0;
-                const prov = Number(bs.liabilities?.provisions) || 0;
-                return <td key={p.year} style={{ textAlign: 'right' }}>{fmt(cred + ocl + prov)}</td>;
-              })}
-            </tr>
-            <tr className="subtotal-row">
-              <td>3. Working Capital Gap (WCG) (1 - 2)</td>
-              {projectionsData.projections?.map((p: any) => {
-                const bs = p.bsProjection ? JSON.parse(p.bsProjection) : {};
-                const inv = Number(bs.assets?.inventory) || 0;
-                const debtors = Number(bs.assets?.sundryDebtors) || 0;
-                const cash = Number(bs.assets?.cashBank) || 0;
-                const loans = Number(bs.assets?.loansAdvances) || 0;
-                const oca = Number(bs.assets?.otherCurrentAssets) || 0;
-                const tca = inv + debtors + cash + loans + oca;
-
-                const cred = Number(bs.liabilities?.tradeCreditors) || 0;
-                const ocl = Number(bs.liabilities?.otherCurrentLiab) || 0;
-                const prov = Number(bs.liabilities?.provisions) || 0;
-                const cl = cred + ocl + prov;
-                return <td key={p.year} style={{ textAlign: 'right' }}>{fmt(tca - cl)}</td>;
-              })}
-            </tr>
-            <tr>
-              <td>4. Minimum Margin (25% of Total Current Assets)</td>
-              {projectionsData.projections?.map((p: any) => {
-                const bs = p.bsProjection ? JSON.parse(p.bsProjection) : {};
-                const inv = Number(bs.assets?.inventory) || 0;
-                const debtors = Number(bs.assets?.sundryDebtors) || 0;
-                const cash = Number(bs.assets?.cashBank) || 0;
-                const loans = Number(bs.assets?.loansAdvances) || 0;
-                const oca = Number(bs.assets?.otherCurrentAssets) || 0;
-                const tca = inv + debtors + cash + loans + oca;
-                return <td key={p.year} style={{ textAlign: 'right' }}>{fmt(tca * 0.25)}</td>;
-              })}
-            </tr>
-            <tr className="subtotal-row">
-              <td>5. Maximum Permissible Bank Finance (MPBF) (3 - 4)</td>
-              {projectionsData.projections?.map((p: any) => {
-                const r = p.ratios ? JSON.parse(p.ratios) : {};
-                return <td key={p.year} style={{ textAlign: 'right', fontWeight: 800, color: '#166534' }}>{fmt(r.mpbf)}</td>;
-              })}
-            </tr>
-            <tr>
-              <td>6. Proposed Bank Working Capital Limit (CC Limit)</td>
-              {projectionsData.projections?.map((p: any) => {
-                const bs = p.bsProjection ? JSON.parse(p.bsProjection) : {};
-                return <td key={p.year} style={{ textAlign: 'right', fontWeight: 700 }}>{fmt(bs.liabilities?.ccOdLimit)}</td>;
-              })}
-            </tr>
+               <td>1. Total Current Assets (TCA)</td>
+               {projectionsData.projections?.map((p: any) => {
+                 const bs = p.bsProjection ? safeParseJSON(p.bsProjection) : {};
+                 const inv = Number(bs.assets?.inventory) || 0;
+                 const debtors = Number(bs.assets?.sundryDebtors) || 0;
+                 const cash = Number(bs.assets?.cashBank) || 0;
+                 const loans = Number(bs.assets?.loansAdvances) || 0;
+                 const oca = Number(bs.assets?.otherCurrentAssets) || 0;
+                 return <td key={p.year} style={{ textAlign: 'right' }}>{fmt(inv + debtors + cash + loans + oca)}</td>;
+               })}
+             </tr>
+             <tr>
+               <td>2. Current Liabilities (Excluding Bank Borrowings)</td>
+               {projectionsData.projections?.map((p: any) => {
+                 const bs = p.bsProjection ? safeParseJSON(p.bsProjection) : {};
+                 const cred = Number(bs.liabilities?.tradeCreditors) || 0;
+                 const ocl = Number(bs.liabilities?.otherCurrentLiab) || 0;
+                 const prov = Number(bs.liabilities?.provisions) || 0;
+                 return <td key={p.year} style={{ textAlign: 'right' }}>{fmt(cred + ocl + prov)}</td>;
+               })}
+             </tr>
+             <tr className="subtotal-row">
+               <td>3. Working Capital Gap (WCG) (1 - 2)</td>
+               {projectionsData.projections?.map((p: any) => {
+                 const bs = p.bsProjection ? safeParseJSON(p.bsProjection) : {};
+                 const inv = Number(bs.assets?.inventory) || 0;
+                 const debtors = Number(bs.assets?.sundryDebtors) || 0;
+                 const cash = Number(bs.assets?.cashBank) || 0;
+                 const loans = Number(bs.assets?.loansAdvances) || 0;
+                 const oca = Number(bs.assets?.otherCurrentAssets) || 0;
+                 const tca = inv + debtors + cash + loans + oca;
+ 
+                 const cred = Number(bs.liabilities?.tradeCreditors) || 0;
+                 const ocl = Number(bs.liabilities?.otherCurrentLiab) || 0;
+                 const prov = Number(bs.liabilities?.provisions) || 0;
+                 const cl = cred + ocl + prov;
+                 return <td key={p.year} style={{ textAlign: 'right' }}>{fmt(tca - cl)}</td>;
+               })}
+             </tr>
+             <tr>
+               <td>4. Minimum Margin (25% of Total Current Assets)</td>
+               {projectionsData.projections?.map((p: any) => {
+                 const bs = p.bsProjection ? safeParseJSON(p.bsProjection) : {};
+                 const inv = Number(bs.assets?.inventory) || 0;
+                 const debtors = Number(bs.assets?.sundryDebtors) || 0;
+                 const cash = Number(bs.assets?.cashBank) || 0;
+                 const loans = Number(bs.assets?.loansAdvances) || 0;
+                 const oca = Number(bs.assets?.otherCurrentAssets) || 0;
+                 const tca = inv + debtors + cash + loans + oca;
+                 return <td key={p.year} style={{ textAlign: 'right' }}>{fmt(tca * 0.25)}</td>;
+               })}
+             </tr>
+             <tr className="subtotal-row">
+               <td>5. Maximum Permissible Bank Finance (MPBF) (3 - 4)</td>
+               {projectionsData.projections?.map((p: any) => {
+                 const r = p.ratios ? safeParseJSON(p.ratios) : {};
+                 return <td key={p.year} style={{ textAlign: 'right', fontWeight: 800, color: '#166534' }}>{fmt(r.mpbf)}</td>;
+               })}
+             </tr>
+             <tr>
+               <td>6. Proposed Bank Working Capital Limit (CC Limit)</td>
+               {projectionsData.projections?.map((p: any) => {
+                 const bs = p.bsProjection ? safeParseJSON(p.bsProjection) : {};
+                 return <td key={p.year} style={{ textAlign: 'right', fontWeight: 700 }}>{fmt(bs.liabilities?.ccOdLimit)}</td>;
+               })}
+             </tr>
           </tbody>
         </table>
         </div>
@@ -1498,10 +1498,10 @@ export default function ReportPrint() {
                 </tr>
               </thead>
               <tbody>
-                <tr>
+                 <tr>
                   <td>Debt Service Coverage Ratio (DSCR)</td>
                   {projectionsData.projections?.map((p: any) => {
-                    const r = p.ratios ? JSON.parse(p.ratios) : {};
+                    const r = p.ratios ? safeParseJSON(p.ratios) : {};
                     const isGood = (r.dscr || 0) >= 1.25;
                     return <td key={p.year} style={{ textAlign: 'right', fontWeight: 700, color: isGood ? '#166534' : '#991b1b' }}>{fmt(r.dscr)}</td>;
                   })}
@@ -1510,7 +1510,7 @@ export default function ReportPrint() {
                 <tr>
                   <td>Current Ratio</td>
                   {projectionsData.projections?.map((p: any) => {
-                    const r = p.ratios ? JSON.parse(p.ratios) : {};
+                    const r = p.ratios ? safeParseJSON(p.ratios) : {};
                     const isGood = (r.currentRatio || 0) >= 1.33;
                     return <td key={p.year} style={{ textAlign: 'right', fontWeight: 700, color: isGood ? '#166534' : '#991b1b' }}>{fmt(r.currentRatio)}</td>;
                   })}
@@ -1519,7 +1519,7 @@ export default function ReportPrint() {
                 <tr>
                   <td>Debt-Equity Ratio</td>
                   {projectionsData.projections?.map((p: any) => {
-                    const r = p.ratios ? JSON.parse(p.ratios) : {};
+                    const r = p.ratios ? safeParseJSON(p.ratios) : {};
                     const isGood = (r.debtEquityRatio || 0) <= 2.0;
                     return <td key={p.year} style={{ textAlign: 'right', fontWeight: 700, color: isGood ? '#166534' : '#991b1b' }}>{fmt(r.debtEquityRatio)}</td>;
                   })}
@@ -1528,7 +1528,7 @@ export default function ReportPrint() {
                 <tr>
                   <td>EBITDA Margin %</td>
                   {projectionsData.projections?.map((p: any) => {
-                    const r = p.ratios ? JSON.parse(p.ratios) : {};
+                    const r = p.ratios ? safeParseJSON(p.ratios) : {};
                     return <td key={p.year} style={{ textAlign: 'right' }}>{fmt(r.ebitdaMarginPct)}%</td>;
                   })}
                   <td style={{ textAlign: 'right', color: '#64748b' }}>≥ 15.0%</td>
@@ -1536,7 +1536,7 @@ export default function ReportPrint() {
                 <tr>
                   <td>Net Profit Margin %</td>
                   {projectionsData.projections?.map((p: any) => {
-                    const r = p.ratios ? JSON.parse(p.ratios) : {};
+                    const r = p.ratios ? safeParseJSON(p.ratios) : {};
                     return <td key={p.year} style={{ textAlign: 'right' }}>{fmt(r.netMarginPct)}%</td>;
                   })}
                   <td style={{ textAlign: 'right', color: '#64748b' }}>≥ 5.0%</td>
@@ -1544,7 +1544,7 @@ export default function ReportPrint() {
                 <tr>
                   <td>Interest Coverage Ratio</td>
                   {projectionsData.projections?.map((p: any) => {
-                    const r = p.ratios ? JSON.parse(p.ratios) : {};
+                    const r = p.ratios ? safeParseJSON(p.ratios) : {};
                     return <td key={p.year} style={{ textAlign: 'right', fontWeight: 600 }}>{fmt(r.interestCoverageRatio)}</td>;
                   })}
                   <td style={{ textAlign: 'right', color: '#64748b' }}>≥ 2.00</td>
@@ -1612,7 +1612,7 @@ export default function ReportPrint() {
               <tbody>
                 {(() => {
                   const schedule = typeof projectionsData.loanSchedule.scheduleData === 'string'
-                    ? JSON.parse(projectionsData.loanSchedule.scheduleData)
+                    ? safeParseJSON(projectionsData.loanSchedule.scheduleData)
                     : projectionsData.loanSchedule.scheduleData || [];
                     
                   return schedule
@@ -1961,8 +1961,8 @@ function RevenueChart({ data = [] }: { data: any[] }) {
   // Extract years and values
   const years = data.map(d => d.year);
   const values = data.map(d => {
-    const pl = d.plProjection ? JSON.parse(d.plProjection) : (d.pl || {});
-    const ratios = d.ratios ? JSON.parse(d.ratios) : (d.ratios || {});
+    const pl = d.plProjection ? safeParseJSON(d.plProjection) : (d.pl || {});
+    const ratios = d.ratios ? safeParseJSON(d.ratios) : (d.ratios || {});
     return {
       revenue: Number(pl.grossSales) || 0,
       pat: Number(ratios.pat) || 0
@@ -2092,7 +2092,7 @@ function DscrChart({ data = [] }: { data: any[] }) {
 
   const years = data.map(d => d.year);
   const values = data.map(d => {
-    const ratios = d.ratios ? JSON.parse(d.ratios) : (d.ratios || {});
+    const ratios = d.ratios ? safeParseJSON(d.ratios) : (d.ratios || {});
     return Number(ratios.dscr) || 0;
   });
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api } from '../../../lib/api';
+import { api, safeParseJSON } from '../../../lib/api';
 
 const fmt = (n: number, dp = 2) => (Number(n) || 0).toLocaleString('en-IN', { minimumFractionDigits: dp, maximumFractionDigits: dp });
 
@@ -82,16 +82,16 @@ export default function ProjectionsTab({ reportId }: { reportId: string }) {
             {projections.map((p: any, i: number) => (
               <button key={i} className={`tab-item ${activeYear === i ? 'active' : ''}`} onClick={() => setActiveYear(i)}>
                 {p.year}
-                <span style={{marginLeft:4,fontSize:10,color: (JSON.parse(p.ratios||'{}').dscr||0) >= 1.25 ? 'var(--accent-green)' : 'var(--accent-amber)'}}>●</span>
+                <span style={{marginLeft:4,fontSize:10,color: (safeParseJSON(p.ratios).dscr||0) >= 1.25 ? 'var(--accent-green)' : 'var(--accent-amber)'}}>●</span>
               </button>
             ))}
           </div>
 
           {projections[activeYear] && (() => {
             const p = projections[activeYear];
-            const pl = p.plProjection ? JSON.parse(p.plProjection) : {};
-            const ratios = p.ratios ? JSON.parse(p.ratios) : {};
-            const cf = p.cfProjection ? JSON.parse(p.cfProjection) : {};
+            const pl = p.plProjection ? safeParseJSON(p.plProjection) : {};
+            const ratios = p.ratios ? safeParseJSON(p.ratios) : {};
+            const cf = p.cfProjection ? safeParseJSON(p.cfProjection) : {};
 
             return (
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:20}}>
@@ -223,8 +223,8 @@ export default function ProjectionsTab({ reportId }: { reportId: string }) {
                         <td style={{textAlign:'left',fontWeight:600}}>{row.label}</td>
                         {projections.map((p: any) => {
                           const val = row.type === 'ratio'
-                            ? (p.ratios ? JSON.parse(p.ratios) : {})[row.key]
-                            : (p.plProjection ? JSON.parse(p.plProjection) : {})[row.key];
+                            ? (p.ratios ? safeParseJSON(p.ratios) : {})[row.key]
+                            : (p.plProjection ? safeParseJSON(p.plProjection) : {})[row.key];
                           return <td key={p.year}>{fmt(val||0)}</td>;
                         })}
                       </tr>
@@ -254,7 +254,7 @@ export default function ProjectionsTab({ reportId }: { reportId: string }) {
                     </tr>
                   </thead>
                   <tbody>
-                    {(typeof loanSchedule.scheduleData === 'string' ? JSON.parse(loanSchedule.scheduleData) : loanSchedule.scheduleData)
+                    {(typeof loanSchedule.scheduleData === 'string' ? safeParseJSON(loanSchedule.scheduleData) : loanSchedule.scheduleData)
                       .filter((r: any) => !r.isMoratorium || r.month % 12 === 0)
                       .reduce((acc: any[], row: any) => {
                         const yr = Math.ceil(row.month / 12);

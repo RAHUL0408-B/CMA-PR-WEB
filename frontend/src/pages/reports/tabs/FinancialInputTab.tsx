@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api } from '../../../lib/api';
+import { api, safeParseJSON } from '../../../lib/api';
 
 const PL_FIELDS = [
   { key: 'grossSales', label: 'Gross Sales / Turnover', section: 'INCOME' },
@@ -101,9 +101,9 @@ export default function FinancialInputTab({
         setActiveYear(loadedYears[loadedYears.length - 1]);
         const pl: any = {}, assets: any = {}, liab: any = {};
         existing.forEach((y: any) => {
-          pl[y.year] = y.plData ? JSON.parse(y.plData) : {};
-          assets[y.year] = y.bsAssets ? JSON.parse(y.bsAssets) : {};
-          liab[y.year] = y.bsLiabilities ? JSON.parse(y.bsLiabilities) : {};
+          pl[y.year] = y.plData ? safeParseJSON(y.plData) : {};
+          assets[y.year] = y.bsAssets ? safeParseJSON(y.bsAssets) : {};
+          liab[y.year] = y.bsLiabilities ? safeParseJSON(y.bsLiabilities) : {};
         });
         setPlData(pl); setBsAssets(assets); setBsLiab(liab);
       }

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api } from '../../../lib/api';
+import { api, safeParseJSON } from '../../../lib/api';
 
 const DEFAULT_ASSUMPTIONS = {
   salesGrowthPct: 15, rawMaterialPct: 60, salaryGrowthPct: 10,
@@ -20,7 +20,7 @@ export default function AssumptionsTab({ reportId }: { reportId: string }) {
     api.projections.getAssumptions(reportId).then(a => {
       if (a) {
         setForm({ ...DEFAULT_ASSUMPTIONS, ...a, capacityUtilization: [] });
-        setCapUtil(typeof a.capacityUtilization === 'string' ? JSON.parse(a.capacityUtilization) : (a.capacityUtilization || [70,80,85,90,95]));
+        setCapUtil(typeof a.capacityUtilization === 'string' ? safeParseJSON(a.capacityUtilization) : (a.capacityUtilization || [70,80,85,90,95]));
       }
     }).catch(console.error);
   }, [reportId]);

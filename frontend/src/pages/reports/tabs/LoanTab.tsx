@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { safeParseJSON } from '../../../lib/api';
 
 const LOAN_TYPES = ['Term Loan','Working Capital','CC Limit','OD Limit','Mudra Loan','Machinery Loan','MSME Loan','Startup Loan','Vehicle Loan','LAP','Home Loan'];
 const BANKS = ['SBI','HDFC Bank','ICICI Bank','Axis Bank','Bank of Baroda','Canara Bank','Punjab National Bank','Union Bank','Bank of India','UCO Bank','Indian Bank','Kotak Bank','Yes Bank','IDBI Bank','Federal Bank','SIDBI','NABARD','Other'];
@@ -45,10 +46,10 @@ export default function LoanTab({ report, onSave }: { report: any; onSave: (d: a
   });
 
   const [projectCost, setProjectCost] = useState<Record<string, number>>(
-    report.projectCost ? (typeof report.projectCost === 'string' ? JSON.parse(report.projectCost) : report.projectCost) : {}
+    report.projectCost ? (typeof report.projectCost === 'string' ? safeParseJSON(report.projectCost) : report.projectCost) : {}
   );
   const [meansOfFinance, setMeansOfFinance] = useState<Record<string, number>>(
-    report.meansOfFinance ? (typeof report.meansOfFinance === 'string' ? JSON.parse(report.meansOfFinance) : report.meansOfFinance) : {}
+    report.meansOfFinance ? (typeof report.meansOfFinance === 'string' ? safeParseJSON(report.meansOfFinance) : report.meansOfFinance) : {}
   );
 
   const [saving, setSaving] = useState(false);

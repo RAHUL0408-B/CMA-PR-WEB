@@ -1,16 +1,18 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../../lib/api';
+import { useAuth } from '../../context/AuthContext';
 
 export default function ReportList() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [reports, setReports] = useState<any[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.reports.list().then(setReports).catch(console.error).finally(() => setLoading(false));
-  }, []);
+    api.reports.list(undefined, user?.uid).then(setReports).catch(console.error).finally(() => setLoading(false));
+  }, [user?.uid]);
 
   const filtered = reports.filter(r =>
     [r.title, r.client?.name, r.reportType, r.status].some(v => v?.toLowerCase().includes(search.toLowerCase()))

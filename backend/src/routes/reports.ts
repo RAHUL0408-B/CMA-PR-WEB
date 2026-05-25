@@ -6,9 +6,25 @@ const router = Router();
 // GET /api/reports
 router.get('/', async (req, res) => {
   try {
-    const { clientId } = req.query;
+    const { clientId, userId } = req.query;
+    const where: any = {};
+    
+    if (clientId) {
+      where.clientId = String(clientId);
+    }
+    
+    if (userId) {
+      let user = await prisma.user.findFirst({ where: { firebaseUid: String(userId) } });
+      if (!user) {
+        user = await prisma.user.create({
+          data: { firebaseUid: String(userId), email: `${userId}@cma.local`, name: 'App User' }
+        });
+      }
+      where.userId = user.id;
+    }
+
     const reports = await prisma.report.findMany({
-      where: clientId ? { clientId: String(clientId) } : {},
+      where,
       include: {
         client: { select: { name: true, businessName: true } },
         _count: { select: { financialYears: true, generatedFiles: true } }

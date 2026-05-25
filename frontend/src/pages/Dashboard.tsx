@@ -1,18 +1,20 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
+import { useAuth } from '../context/AuthContext';
 
 interface Stats { clients: number; reports: number; drafts: number; completed: number }
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [stats, setStats] = useState<Stats>({ clients: 0, reports: 0, drafts: 0, completed: 0 });
   const [recentClients, setRecentClients] = useState<any[]>([]);
   const [recentReports, setRecentReports] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([api.clients.list(), api.reports.list()])
+    Promise.all([api.clients.list(user?.uid), api.reports.list(undefined, user?.uid)])
       .then(([clients, reports]) => {
         setStats({
           clients: clients.length,
@@ -25,7 +27,7 @@ export default function Dashboard() {
       })
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, []);
+  }, [user?.uid]);
 
   const statCards = [
     { label: 'Total Clients', value: stats.clients, color: '', icon: '👥', sub: 'Active clients' },

@@ -1,6 +1,51 @@
 import { auth } from './firebase';
 import { computeProjections, computeLoanSchedule } from './projectionEngine';
 
+export function safeParseJSON(val: any, fallback: any = {}): any {
+  if (!val) return fallback;
+  if (typeof val === 'object') return val;
+  if (typeof val === 'string') {
+    const trimmed = val.trim();
+    if (trimmed === '' || trimmed === '[object Object]') return fallback;
+    try {
+      return JSON.parse(trimmed);
+    } catch (e) {
+      console.warn('Failed to parse JSON string:', val, e);
+      return fallback;
+    }
+  }
+  return fallback;
+}
+
+// Self-healing migration for old localStorage data
+try {
+  const rawFin = localStorage.getItem('cma_financials');
+  if (rawFin) {
+    const financials = JSON.parse(rawFin);
+    let migrated = false;
+    financials.forEach((f: any) => {
+      if (f.plData && (typeof f.plData === 'object' || f.plData === '[object Object]')) {
+        f.plData = typeof f.plData === 'object' ? JSON.stringify(f.plData) : '{}';
+        migrated = true;
+      }
+      if (f.bsAssets && (typeof f.bsAssets === 'object' || f.bsAssets === '[object Object]')) {
+        f.bsAssets = typeof f.bsAssets === 'object' ? JSON.stringify(f.bsAssets) : '{}';
+        migrated = true;
+      }
+      if (f.bsLiabilities && (typeof f.bsLiabilities === 'object' || f.bsLiabilities === '[object Object]')) {
+        f.bsLiabilities = typeof f.bsLiabilities === 'object' ? JSON.stringify(f.bsLiabilities) : '{}';
+        migrated = true;
+      }
+    });
+    if (migrated) {
+      localStorage.setItem('cma_financials', JSON.stringify(financials));
+      console.log('Migrated/Healed cma_financials storage objects to JSON strings.');
+    }
+  }
+} catch (e) {
+  console.error('Failed to run financials local storage migration:', e);
+}
+
 const BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000/api';
 
 const isOffline = () => {
@@ -32,7 +77,6 @@ async function fetchAPI<T>(path: string, options: RequestInit = {}): Promise<T> 
     }
     return res.json();
   } catch (err: any) {
-    // If it's a network error (server is down/unreachable)
     if (err instanceof TypeError || err.message?.includes('Failed to fetch') || err.message?.includes('NetworkError')) {
       console.warn('Backend server not detected. Switching to browser-only offline mode (LocalStorage).');
       localStorage.setItem('cma_use_offline_mode', 'true');
@@ -82,7 +126,14 @@ async function handleOfflineRequest<T>(path: string, options: RequestInit = {}):
     if (method === 'GET') {
       const clients = getDB('cma_clients');
       const reports = getDB('cma_reports');
-      return clients.map(c => ({
+      
+      let filtered = clients;
+      if (path.includes('userId=')) {
+        const uid = path.split('userId=')[1]?.split('&')[0];
+        filtered = clients.filter(c => c.userId === uid || !c.userId);
+      }
+
+      return filtered.map(c => ({
         ...c,
         _count: { reports: reports.filter(r => r.clientId === c.id).length }
       })) as any;
@@ -131,11 +182,28 @@ async function handleOfflineRequest<T>(path: string, options: RequestInit = {}):
   if (cleanPath === '/reports') {
     if (method === 'GET') {
       const reports = getDB('cma_reports');
+      let filtered = reports;
+      
       if (path.includes('clientId=')) {
         const cid = path.split('clientId=')[1]?.split('&')[0];
-        return reports.filter(r => r.clientId === cid) as any;
+        filtered = filtered.filter(r => r.clientId === cid);
       }
-      return reports as any;
+      if (path.includes('userId=')) {
+        const uid = path.split('userId=')[1]?.split('&')[0];
+        filtered = filtered.filter(r => r.userId === uid || !r.userId);
+      }
+      
+      const clients = getDB('cma_clients');
+      const withClientInfo = filtered.map(r => {
+        const client = clients.find(c => c.id === r.clientId);
+        return {
+          ...r,
+          client: client ? { name: client.name, businessName: client.businessName } : null,
+          _count: { financialYears: getDB('cma_financials').filter(f => f.reportId === r.id).length, generatedFiles: 1 }
+        };
+      });
+
+      return withClientInfo as any;
     }
     if (method === 'POST') {
       const reports = getDB('cma_reports');
@@ -163,27 +231,68 @@ async function handleOfflineRequest<T>(path: string, options: RequestInit = {}):
       const financialYears = getDB('cma_financials').filter(f => f.reportId === id);
       const assumptions = getDB('cma_assumptions').filter(a => a.reportId === id);
       const projections = getDB('cma_projections').filter(p => p.reportId === id).map(p => ({
+        id: p.id,
+        reportId: p.reportId,
         year: p.year,
-        pl: JSON.parse(p.plProjection),
-        bs: JSON.parse(p.bsProjection),
-        cf: JSON.parse(p.cfProjection),
-        ratios: JSON.parse(p.ratios)
+        plProjection: p.plProjection,
+        bsProjection: p.bsProjection,
+        cfProjection: p.cfProjection,
+        ratios: p.ratios,
+        dscr: p.dscr,
+        createdAt: p.createdAt
       }));
+      const loanSchedule = getDB('cma_loan_schedules').find(l => l.reportId === id) || null;
       return {
         ...report,
         client,
         financialYears,
         assumptions,
-        projections
+        projections,
+        loanSchedule
       } as any;
     }
     if (method === 'PUT') {
       const reports = getDB('cma_reports');
       const idx = reports.findIndex(r => r.id === id);
       if (idx === -1) throw new Error('Report not found');
-      const updated = { ...reports[idx], ...getBody(), updatedAt: new Date().toISOString() };
+      
+      const body = getBody();
+      
+      // Handle projectCost and meansOfFinance stringification
+      const updated = {
+        ...reports[idx],
+        ...body,
+        projectCost: body.projectCost ? (typeof body.projectCost === 'string' ? body.projectCost : JSON.stringify(body.projectCost)) : reports[idx].projectCost,
+        meansOfFinance: body.meansOfFinance ? (typeof body.meansOfFinance === 'string' ? body.meansOfFinance : JSON.stringify(body.meansOfFinance)) : reports[idx].meansOfFinance,
+        updatedAt: new Date().toISOString()
+      };
+      
       reports[idx] = updated;
       setDB('cma_reports', reports);
+      
+      // Auto-compute loan schedule if loan parameters are changed
+      if (body.loanAmount || body.interestRate || body.loanTenure || body.moratoriumMonths !== undefined) {
+        const schedule = computeLoanSchedule({
+          loanAmount: Number(updated.loanAmount || 0),
+          annualRate: Number(updated.interestRate || 12),
+          tenureMonths: Number(updated.loanTenure || 60),
+          moratoriumMonths: Number(updated.moratoriumMonths || 0)
+        });
+        const schedules = getDB('cma_loan_schedules').filter(l => l.reportId !== id);
+        schedules.push({
+          id: 'ls_' + Math.random().toString(36).substring(2, 11),
+          reportId: id,
+          loanAmount: Number(updated.loanAmount || 0),
+          interestRate: Number(updated.interestRate || 12),
+          tenureMonths: Number(updated.loanTenure || 60),
+          moratoriumMonths: Number(updated.moratoriumMonths || 0),
+          emiAmount: schedule.emi,
+          scheduleData: JSON.stringify(schedule.schedule),
+          createdAt: new Date().toISOString()
+        });
+        setDB('cma_loan_schedules', schedules);
+      }
+
       return updated as any;
     }
     if (method === 'DELETE') {
@@ -204,13 +313,26 @@ async function handleOfflineRequest<T>(path: string, options: RequestInit = {}):
     if (method === 'POST') {
       const financials = getDB('cma_financials');
       const body = getBody();
+      
+      let isBalanced = false;
+      if (body.bsAssets && body.bsLiabilities) {
+        const assets = Object.values(body.bsAssets as Record<string, number>).reduce((a, b) => a + (b || 0), 0);
+        const liabilities = Object.values(body.bsLiabilities as Record<string, number>).reduce((a, b) => a + (b || 0), 0);
+        isBalanced = Math.abs(assets - liabilities) < 1;
+      }
+
       const idx = financials.findIndex(f => f.reportId === reportId && f.year === body.year);
       const newOrUpdated = {
         id: idx !== -1 ? financials[idx].id : 'f_' + Math.random().toString(36).substring(2, 11),
         reportId,
         createdAt: idx !== -1 ? financials[idx].createdAt : new Date().toISOString(),
         updatedAt: new Date().toISOString(),
-        ...body
+        year: body.year,
+        yearType: body.yearType || 'HISTORICAL',
+        plData: body.plData ? (typeof body.plData === 'string' ? body.plData : JSON.stringify(body.plData)) : undefined,
+        bsAssets: body.bsAssets ? (typeof body.bsAssets === 'string' ? body.bsAssets : JSON.stringify(body.bsAssets)) : undefined,
+        bsLiabilities: body.bsLiabilities ? (typeof body.bsLiabilities === 'string' ? body.bsLiabilities : JSON.stringify(body.bsLiabilities)) : undefined,
+        isBalanced
       };
       if (idx !== -1) {
         financials[idx] = newOrUpdated;
@@ -311,10 +433,10 @@ async function handleOfflineRequest<T>(path: string, options: RequestInit = {}):
       };
     }
 
-    const basePL = baseYear.plData ? JSON.parse(baseYear.plData) : {};
+    const basePL = baseYear.plData ? safeParseJSON(baseYear.plData) : {};
     const baseBS = {
-      assets: baseYear.bsAssets ? JSON.parse(baseYear.bsAssets) : {},
-      liabilities: baseYear.bsLiabilities ? JSON.parse(baseYear.bsLiabilities) : {}
+      assets: baseYear.bsAssets ? safeParseJSON(baseYear.bsAssets) : {},
+      liabilities: baseYear.bsLiabilities ? safeParseJSON(baseYear.bsLiabilities) : {}
     };
 
     const computed = computeProjections({
@@ -340,7 +462,8 @@ async function handleOfflineRequest<T>(path: string, options: RequestInit = {}):
         bsProjection: JSON.stringify(p.bs),
         cfProjection: JSON.stringify(p.cf),
         ratios: JSON.stringify(p.ratios),
-        dscr: p.ratios.dscr
+        dscr: p.ratios.dscr,
+        createdAt: new Date().toISOString()
       });
     });
     setDB('cma_projections', projectionsDB);
@@ -358,13 +481,21 @@ async function handleOfflineRequest<T>(path: string, options: RequestInit = {}):
   if (params && method === 'GET') {
     const reportId = params.reportId;
     const projections = getDB('cma_projections').filter(p => p.reportId === reportId);
-    return projections.map(p => ({
-      year: p.year,
-      pl: JSON.parse(p.plProjection),
-      bs: JSON.parse(p.bsProjection),
-      cf: JSON.parse(p.cfProjection),
-      ratios: JSON.parse(p.ratios)
-    })) as any;
+    const loanSchedule = getDB('cma_loan_schedules').find(l => l.reportId === reportId) || null;
+    return {
+      projections: projections.map(p => ({
+        id: p.id,
+        reportId: p.reportId,
+        year: p.year,
+        plProjection: p.plProjection,
+        bsProjection: p.bsProjection,
+        cfProjection: p.cfProjection,
+        ratios: p.ratios,
+        dscr: p.dscr,
+        createdAt: p.createdAt
+      })),
+      loanSchedule
+    } as any;
   }
 
   // ---- AI ----
@@ -481,10 +612,10 @@ async function handleOfflineRequest<T>(path: string, options: RequestInit = {}):
     const financials = getDB('cma_financials').filter(f => f.reportId === reportId);
     const projections = getDB('cma_projections').filter(p => p.reportId === reportId).map(p => ({
       year: p.year,
-      plProjection: JSON.parse(p.plProjection),
-      bsProjection: JSON.parse(p.bsProjection),
-      cfProjection: JSON.parse(p.cfProjection),
-      ratios: JSON.parse(p.ratios)
+      plProjection: safeParseJSON(p.plProjection),
+      bsProjection: safeParseJSON(p.bsProjection),
+      cfProjection: safeParseJSON(p.cfProjection),
+      ratios: safeParseJSON(p.ratios)
     }));
 
     const loanSchedule = report.loanAmount ? computeLoanSchedule({
@@ -504,9 +635,9 @@ async function handleOfflineRequest<T>(path: string, options: RequestInit = {}):
         },
         financialYears: financials.map(f => ({
           ...f,
-          plData: f.plData ? JSON.parse(f.plData) : {},
-          bsAssets: f.bsAssets ? JSON.parse(f.bsAssets) : {},
-          bsLiabilities: f.bsLiabilities ? JSON.parse(f.bsLiabilities) : {}
+          plData: f.plData ? safeParseJSON(f.plData) : {},
+          bsAssets: f.bsAssets ? safeParseJSON(f.bsAssets) : {},
+          bsLiabilities: f.bsLiabilities ? safeParseJSON(f.bsLiabilities) : {}
         })),
         projections,
         loanSchedule: {
@@ -528,7 +659,7 @@ async function handleOfflineRequest<T>(path: string, options: RequestInit = {}):
 
 export const api = {
   clients: {
-    list: () => fetchAPI<any[]>('/clients'),
+    list: (userId?: string) => fetchAPI<any[]>(`/clients${userId ? `?userId=${userId}` : ''}`),
     get: (id: string) => fetchAPI<any>(`/clients/${id}`),
     create: (data: any) => fetchAPI<any>('/clients', { method: 'POST', body: JSON.stringify(data) }),
     update: (id: string, data: any) => fetchAPI<any>(`/clients/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
@@ -536,7 +667,13 @@ export const api = {
   },
 
   reports: {
-    list: (clientId?: string) => fetchAPI<any[]>(`/reports${clientId ? `?clientId=${clientId}` : ''}`),
+    list: (clientId?: string, userId?: string) => {
+      const params = [];
+      if (clientId) params.push(`clientId=${clientId}`);
+      if (userId) params.push(`userId=${userId}`);
+      const qs = params.length > 0 ? `?${params.join('&')}` : '';
+      return fetchAPI<any[]>(`/reports${qs}`);
+    },
     get: (id: string) => fetchAPI<any>(`/reports/${id}`),
     create: (data: any) => fetchAPI<any>('/reports', { method: 'POST', body: JSON.stringify(data) }),
     update: (id: string, data: any) => fetchAPI<any>(`/reports/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
