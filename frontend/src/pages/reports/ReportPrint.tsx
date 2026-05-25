@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { api, safeParseJSON } from '../../lib/api';
 
 const fmt = (n: any, dp = 2) => {
@@ -11,6 +11,8 @@ const fmt = (n: any, dp = 2) => {
 export default function ReportPrint() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
+  const autoPrint = new URLSearchParams(location.search).get('autoPrint') === 'true';
   const [report, setReport] = useState<any>(null);
   const [projectionsData, setProjectionsData] = useState<any>({ projections: [], loanSchedule: null });
   const [aiLogs, setAiLogs] = useState<any[]>([]);
@@ -32,6 +34,16 @@ export default function ReportPrint() {
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [id]);
+
+  useEffect(() => {
+    if (report && autoPrint) {
+      // Small delay to let the page fully render before printing
+      const timer = setTimeout(() => {
+        window.print();
+      }, 800);
+      return () => clearTimeout(timer);
+    }
+  }, [report, autoPrint]);
 
   useEffect(() => {
     if (report) {

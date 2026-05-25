@@ -3,7 +3,14 @@ import { prisma } from '../lib/prisma.js';
 import Anthropic from '@anthropic-ai/sdk';
 
 const router = Router();
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+const getAnthropicClient = () => {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey || apiKey === 'your_anthropic_api_key_here' || apiKey.trim() === '') {
+    return null;
+  }
+  return new Anthropic({ apiKey });
+};
 
 // POST /api/ai/:reportId/generate
 router.post('/:reportId/generate', async (req, res) => {
@@ -19,6 +26,13 @@ router.post('/:reportId/generate', async (req, res) => {
     ]);
 
     if (!report) return res.status(404).json({ error: 'Report not found' });
+
+    const anthropic = getAnthropicClient();
+    if (!anthropic) {
+      return res.status(503).json({ 
+        error: 'AI commentary requires an Anthropic API key. Please configure ANTHROPIC_API_KEY in backend/.env and restart the server. You can get a free key at https://console.anthropic.com'
+      });
+    }
 
     const financialSummary = historicalYears.map((y: any) => ({
       year: y.year,
@@ -111,6 +125,13 @@ router.post('/:reportId/parse-financials', async (req, res) => {
     const { rawText } = req.body;
 
     if (!rawText) return res.status(400).json({ error: 'Raw text is required' });
+
+    const anthropic = getAnthropicClient();
+    if (!anthropic) {
+      return res.status(503).json({ 
+        error: 'AI parse requires an Anthropic API key. Please configure ANTHROPIC_API_KEY in backend/.env'
+      });
+    }
 
     const systemPrompt = `You are a financial data extraction assistant. Parse unstructured financial text and map to structured JSON.
 You MUST output ONLY valid JSON. No markdown other than standard JSON block. Do not write text before or after the JSON.

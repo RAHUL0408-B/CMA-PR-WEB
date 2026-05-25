@@ -14,16 +14,28 @@ export default function AICommentaryTab({ reportId, report }: { reportId: string
   const [generated, setGenerated] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState<Record<string, boolean>>({});
   const [error, setError] = useState('');
+  const [apiKeyError, setApiKeyError] = useState(false);
   const [generateAll, setGenerateAll] = useState(false);
+  const [copied, setCopied] = useState<string | null>(null);
 
   const generate = async (module: string) => {
     setLoading(l => ({...l, [module]: true}));
     setError('');
+    setApiKeyError(false);
     try {
       const res = await api.ai.generate(reportId, module);
-      setGenerated(g => ({...g, [module]: res.content}));
+      // Handle both online mode { content } and offline mode { content }
+      const text = res.content || res.response || '';
+      if (!text) throw new Error('No content returned from AI');
+      setGenerated(g => ({...g, [module]: text}));
     } catch (err: any) {
-      setError(err.message);
+      const msg = err.message || 'Failed to generate';
+      if (msg.includes('API key') || msg.includes('ANTHROPIC_API_KEY') || msg.includes('503') || msg.includes('auth')) {
+        setApiKeyError(true);
+        setError('AI API key not configured. Please set up your Anthropic API key.');
+      } else {
+        setError(msg);
+      }
     } finally {
       setLoading(l => ({...l, [module]: false}));
     }
@@ -31,15 +43,18 @@ export default function AICommentaryTab({ reportId, report }: { reportId: string
 
   const generateAllModules = async () => {
     setGenerateAll(true);
+    setApiKeyError(false);
     for (const m of AI_MODULES) {
       await generate(m.key);
+      if (apiKeyError) break; // Stop if API key issue
     }
     setGenerateAll(false);
   };
 
-  const copyToClipboard = (text: string) => {
+  const copyToClipboard = (text: string, key: string) => {
     navigator.clipboard.writeText(text).then(() => {
-      // Brief feedback
+      setCopied(key);
+      setTimeout(() => setCopied(null), 2000);
     });
   };
 
@@ -57,14 +72,43 @@ export default function AICommentaryTab({ reportId, report }: { reportId: string
         </button>
       </div>
 
-      <div className="alert alert-info">
-        <div>
-          <strong>AI Commentary Guidelines:</strong> AI generates narrative text based on your financial data.
-          All calculations are performed by the financial engine, not AI. Review all AI-generated content before submission.
+      {/* API Key Setup Guide */}
+      {apiKeyError && (
+        <div className="card" style={{border:'2px solid #f59e0b',background:'#fffbeb'}}>
+          <div className="card-body">
+            <div style={{fontWeight:700,fontSize:14,color:'#92400e',marginBottom:8}}>
+              🔑 Anthropic API Key Required
+            </div>
+            <p style={{fontSize:13,color:'#78350f',marginBottom:10,lineHeight:1.6}}>
+              AI commentary requires an Anthropic (Claude) API key. Follow these steps to set it up:
+            </p>
+            <ol style={{fontSize:13,color:'#78350f',paddingLeft:20,lineHeight:2}}>
+              <li>Visit <a href="https://console.anthropic.com" target="_blank" rel="noopener noreferrer" style={{color:'#1d4ed8',fontWeight:600}}>console.anthropic.com</a> and create a free account</li>
+              <li>Go to API Keys section and create a new API key</li>
+              <li>Open the file: <code style={{background:'#fef3c7',padding:'2px 6px',borderRadius:4,fontFamily:'monospace'}}>backend/.env</code></li>
+              <li>Replace <code style={{background:'#fef3c7',padding:'2px 6px',borderRadius:4,fontFamily:'monospace'}}>your_anthropic_api_key_here</code> with your actual key</li>
+              <li>Restart the backend server</li>
+            </ol>
+            <div style={{marginTop:10,padding:'8px 12px',background:'#fef3c7',borderRadius:6,fontFamily:'monospace',fontSize:12,color:'#78350f'}}>
+              ANTHROPIC_API_KEY=sk-ant-api03-your-actual-key-here
+            </div>
+            <p style={{fontSize:12,color:'#92400e',marginTop:8}}>
+              💡 <strong>Offline mode:</strong> If you're not using the backend server, sample commentary is generated automatically without needing an API key.
+            </p>
+          </div>
         </div>
-      </div>
+      )}
 
-      {error && <div className="alert alert-error">{error}</div>}
+      {!apiKeyError && (
+        <div className="alert alert-info">
+          <div>
+            <strong>AI Commentary Guidelines:</strong> AI generates narrative text based on your financial data.
+            All calculations are performed by the financial engine, not AI. Review all AI-generated content before submission.
+          </div>
+        </div>
+      )}
+
+      {error && !apiKeyError && <div className="alert alert-error">{error}</div>}
 
       {/* Report Info Summary */}
       <div className="card">
@@ -72,7 +116,7 @@ export default function AICommentaryTab({ reportId, report }: { reportId: string
         <div className="card-body">
           <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:12}}>
             {[
-              ['Business', report.client?.businessName || report.client?.name],
+              ['Business', report.client?.businessName || report.client?.name || '—'],
               ['Industry', report.client?.industryType || '—'],
               ['Loan Type', report.loanType || '—'],
               ['Amount', report.loanAmount ? `₹${Number(report.loanAmount).toLocaleString('en-IN')} Lakhs` : '—'],
@@ -97,8 +141,8 @@ export default function AICommentaryTab({ reportId, report }: { reportId: string
               </div>
               <div style={{display:'flex',gap:6}}>
                 {generated[m.key] && (
-                  <button className="btn btn-secondary btn-sm" onClick={() => copyToClipboard(generated[m.key])}>
-                    Copy
+                  <button className="btn btn-secondary btn-sm" onClick={() => copyToClipboard(generated[m.key], m.key)}>
+                    {copied === m.key ? '✓ Copied!' : 'Copy'}
                   </button>
                 )}
                 <button className="btn btn-primary btn-sm" onClick={() => generate(m.key)} disabled={loading[m.key]}>
@@ -142,9 +186,9 @@ export default function AICommentaryTab({ reportId, report }: { reportId: string
               const full = Object.entries(generated)
                 .map(([k, v]) => `## ${AI_MODULES.find(m => m.key === k)?.label}\n\n${v}`)
                 .join('\n\n---\n\n');
-              copyToClipboard(full);
+              copyToClipboard(full, 'all');
             }}>
-              Copy All
+              {copied === 'all' ? '✓ Copied!' : 'Copy All'}
             </button>
           </div>
           <div className="card-body">

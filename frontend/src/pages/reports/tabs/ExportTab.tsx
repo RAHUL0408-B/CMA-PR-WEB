@@ -194,14 +194,13 @@ export default function ExportTab({ reportId, report }: { reportId: string; repo
                 </>
               )}
             </button>
-            <button className="btn btn-secondary btn-lg" onClick={() => window.open(`/reports/${reportId}/print`, '_blank')} style={{flex:1}}>
+            <button className="btn btn-secondary btn-lg" onClick={() => window.open(`/reports/${reportId}/print?autoPrint=true`, '_blank')} style={{flex:1}}>
               📄 PDF Project Report (Print/Save)
             </button>
           </div>
 
           <div className="alert alert-info" style={{fontSize:12}}>
-            The Excel file includes: Cover Page, P&L Statement, Balance Sheet, Ratio Analysis, Loan Schedule, and MPBF computation sheet.
-            Formulas are embedded for bank review.
+            <strong>📄 PDF Instructions:</strong> Click "PDF Project Report" → A print preview opens → In the print dialog, select <strong>"Save as PDF"</strong> as the printer/destination → Click Save. The Excel file includes: Cover Page, P&L Statement, Balance Sheet, Ratio Analysis, Loan Schedule, and MPBF computation sheet.
           </div>
         </div>
       </div>

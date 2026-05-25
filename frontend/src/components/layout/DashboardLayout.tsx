@@ -1,4 +1,5 @@
 import type { ReactElement } from 'react';
+import { useState } from 'react';
 import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 
@@ -17,7 +18,6 @@ const NAV = [
   { label: 'Dashboard', path: '/', iconKey: 'dashboard', section: 'MAIN' },
   { label: 'Clients', path: '/clients', iconKey: 'clients', section: 'MAIN' },
   { label: 'Reports', path: '/reports', iconKey: 'reports', section: 'MAIN' },
-  { label: 'Analytics', path: '/analytics', iconKey: 'analytics', section: 'TOOLS' },
   { label: 'Settings', path: '/settings', iconKey: 'settings', section: 'TOOLS' },
 ];
 
@@ -26,12 +26,14 @@ const PAGE_TITLES: Record<string, string> = {
   '/clients': 'Client Management',
   '/clients/new': 'New Client',
   '/reports': 'Reports',
+  '/settings': 'Settings',
 };
 
 export default function DashboardLayout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   const getTitle = () => {
     const exact = PAGE_TITLES[location.pathname];
@@ -46,83 +48,151 @@ export default function DashboardLayout() {
     return location.pathname.startsWith(path);
   };
 
+  const handleNavClick = () => {
+    setMobileOpen(false);
+  };
+
   const sections = [...new Set(NAV.map(n => n.section))];
+
+  const sidebarContent = (
+    <>
+      <div className="sidebar-logo">
+        <div className="logo-text">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+            <rect width="24" height="24" rx="6" fill="#2563EB"/>
+            <path d="M4 18 L8 10 L12 14 L16 6 L20 12" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+          </svg>
+          CMA Pro
+          <span className="logo-badge">AI</span>
+        </div>
+        <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', marginTop: 4 }}>
+          Financial Underwriting Suite
+        </div>
+      </div>
+
+      {sections.map(section => (
+        <div className="nav-section" key={section}>
+          <div className="nav-label">{section}</div>
+          {NAV.filter(n => n.section === section).map(item => (
+            <Link key={item.path} to={item.path}
+              className={`nav-item ${isActive(item.path) ? 'active' : ''}`}
+              onClick={handleNavClick}>
+              <Icon name={item.iconKey} />
+              {item.label}
+            </Link>
+          ))}
+        </div>
+      ))}
+
+      <div className="sidebar-footer">
+        {/* User Info */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+          <div style={{
+            width: 32, height: 32, borderRadius: '50%', background: 'var(--primary)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 13, fontWeight: 700, color: 'white', flexShrink: 0
+          }}>
+            {(user?.displayName || user?.email || 'U')[0].toUpperCase()}
+          </div>
+          <div style={{ overflow: 'hidden', flex: 1 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'white', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {user?.displayName || 'User'}
+            </div>
+            <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {user?.email}
+            </div>
+          </div>
+        </div>
+        {/* Logout */}
+        <button
+          onClick={() => { logout().then(() => navigate('/login')); handleNavClick(); }}
+          className="btn btn-ghost w-full"
+          style={{ color: 'rgba(255,255,255,0.6)', justifyContent: 'flex-start', padding: '8px 10px', fontSize: 13, gap: 8 }}>
+          <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor">
+            <path fillRule="evenodd" d="M3 3a1 1 0 00-1 1v12a1 1 0 102 0V4a1 1 0 00-1-1zm10.293 9.293a1 1 0 001.414 1.414l3-3a1 1 0 000-1.414l-3-3a1 1 0 10-1.414 1.414L14.586 9H7a1 1 0 100 2h7.586l-1.293 1.293z" clipRule="evenodd"/>
+          </svg>
+          Sign Out
+        </button>
+      </div>
+    </>
+  );
 
   return (
     <div className="app-shell">
-      {/* Sidebar */}
-      <aside className="sidebar">
-        <div className="sidebar-logo">
-          <div className="logo-text">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-              <rect width="24" height="24" rx="6" fill="#2563EB"/>
-              <path d="M4 18 L8 10 L12 14 L16 6 L20 12" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
-            </svg>
-            CMA Pro
-            <span className="logo-badge">AI</span>
-          </div>
-          <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', marginTop: 4 }}>
-            Financial Underwriting Suite
-          </div>
-        </div>
+      {/* Mobile Overlay */}
+      {mobileOpen && (
+        <div className="mobile-overlay" onClick={() => setMobileOpen(false)} />
+      )}
 
-        {sections.map(section => (
-          <div className="nav-section" key={section}>
-            <div className="nav-label">{section}</div>
-            {NAV.filter(n => n.section === section).map(item => (
-              <Link key={item.path} to={item.path}
-                className={`nav-item ${isActive(item.path) ? 'active' : ''}`}>
-                <Icon name={item.iconKey} />
-                {item.label}
-              </Link>
-            ))}
-          </div>
-        ))}
-
-        <div className="sidebar-footer">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-            <div style={{
-              width: 32, height: 32, borderRadius: '50%', background: 'var(--primary)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 13, fontWeight: 700, color: 'white', flexShrink: 0
-            }}>
-              {(user?.displayName || user?.email || 'U')[0].toUpperCase()}
-            </div>
-            <div style={{ overflow: 'hidden' }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: 'white', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {user?.displayName || 'User'}
-              </div>
-              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {user?.email}
-              </div>
-            </div>
-          </div>
-          <button onClick={() => logout().then(() => navigate('/login'))}
-            className="btn btn-ghost w-full"
-            style={{ color: 'rgba(255,255,255,0.5)', justifyContent: 'flex-start', padding: '6px 8px' }}>
-            <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor">
-              <path fillRule="evenodd" d="M3 3a1 1 0 00-1 1v12a1 1 0 102 0V4a1 1 0 00-1-1zm10.293 9.293a1 1 0 001.414 1.414l3-3a1 1 0 000-1.414l-3-3a1 1 0 10-1.414 1.414L14.586 9H7a1 1 0 100 2h7.586l-1.293 1.293z" clipRule="evenodd"/>
-            </svg>
-            Sign out
-          </button>
-        </div>
+      {/* Sidebar (desktop fixed, mobile drawer) */}
+      <aside className={`sidebar ${mobileOpen ? 'sidebar-open' : ''}`}>
+        {sidebarContent}
       </aside>
 
       {/* Main */}
       <div className="main-content">
         <header className="topbar">
+          {/* Hamburger for Mobile */}
+          <button
+            className="hamburger-btn"
+            onClick={() => setMobileOpen(!mobileOpen)}
+            aria-label="Toggle menu">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+              {mobileOpen ? (
+                <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd"/>
+              ) : (
+                <path fillRule="evenodd" d="M3 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 10a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 15a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd"/>
+              )}
+            </svg>
+          </button>
+
           <span className="topbar-title">{getTitle()}</span>
+
           <div className="topbar-actions">
             <Link to="/clients/new" className="btn btn-primary btn-sm">
               <svg width="13" height="13" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd"/></svg>
-              New Client
+              <span className="hide-mobile">New Client</span>
             </Link>
+            {/* Mobile user avatar */}
+            <button
+              className="show-mobile mobile-user-btn"
+              onClick={() => logout().then(() => navigate('/login'))}
+              title={`Sign out (${user?.email})`}
+              style={{
+                width: 32, height: 32, borderRadius: '50%', background: 'var(--primary)',
+                display: 'none', alignItems: 'center', justifyContent: 'center',
+                fontSize: 13, fontWeight: 700, color: 'white', border: 'none', cursor: 'pointer',
+                flexShrink: 0
+              }}>
+              {(user?.displayName || user?.email || 'U')[0].toUpperCase()}
+            </button>
           </div>
         </header>
         <main className="page-content fade-in">
           <Outlet />
         </main>
       </div>
+
+      {/* Mobile Bottom Nav */}
+      <nav className="mobile-bottom-nav">
+        {NAV.filter(n => n.section === 'MAIN').map(item => (
+          <Link
+            key={item.path}
+            to={item.path}
+            className={`mobile-nav-item ${isActive(item.path) ? 'active' : ''}`}
+            onClick={handleNavClick}>
+            <Icon name={item.iconKey} />
+            <span>{item.label}</span>
+          </Link>
+        ))}
+        <Link
+          to="/settings"
+          className={`mobile-nav-item ${isActive('/settings') ? 'active' : ''}`}
+          onClick={handleNavClick}>
+          <Icon name="settings" />
+          <span>Settings</span>
+        </Link>
+      </nav>
     </div>
   );
 }

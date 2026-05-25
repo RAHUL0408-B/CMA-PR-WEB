@@ -130,7 +130,8 @@ async function handleOfflineRequest<T>(path: string, options: RequestInit = {}):
       let filtered = clients;
       if (path.includes('userId=')) {
         const uid = path.split('userId=')[1]?.split('&')[0];
-        filtered = clients.filter(c => c.userId === uid || !c.userId);
+        // Strict filter: only show clients belonging to this user
+        filtered = clients.filter(c => c.userId === uid);
       }
 
       return filtered.map(c => ({
@@ -190,7 +191,8 @@ async function handleOfflineRequest<T>(path: string, options: RequestInit = {}):
       }
       if (path.includes('userId=')) {
         const uid = path.split('userId=')[1]?.split('&')[0];
-        filtered = filtered.filter(r => r.userId === uid || !r.userId);
+        // Strict filter: only show reports belonging to this user
+        filtered = filtered.filter(r => r.userId === uid);
       }
       
       const clients = getDB('cma_clients');
@@ -532,7 +534,7 @@ async function handleOfflineRequest<T>(path: string, options: RequestInit = {}):
     };
     aiLogs.push(newLog);
     setDB('cma_ai_logs', aiLogs);
-    return { response: responseText } as any;
+    return { content: responseText, module: mod, tokens: { input_tokens: 0, output_tokens: 0 } } as any;
   }
 
   params = matchRoute('/ai/:reportId/history');
