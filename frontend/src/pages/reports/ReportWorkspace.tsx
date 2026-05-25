@@ -213,12 +213,6 @@ export default function ReportWorkspace() {
         </button>
       </div>
 
-      {/* Assistance Card */}
-      <div className="cma-assist-card">
-        <div className="cma-assist-icon">🎧</div>
-        <div className="cma-assist-title">Need Assistance for your report</div>
-        <button className="cma-assist-btn">Contact Us</button>
-      </div>
     </div>
   );
 }
