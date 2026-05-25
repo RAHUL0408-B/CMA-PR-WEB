@@ -1,0 +1,17 @@
+providers = ["node"]
+
+[phases.setup]
+nixPkgs = ["nodejs_20"]
+
+[phases.install]
+cmds = ["npm install"]
+
+[phases.build]
+cmds = [
+  "npx prisma generate",
+  "npm run build",
+  "npx prisma db push --accept-data-loss"
+]
+
+[start]
+cmd = "node dist/index.js"
