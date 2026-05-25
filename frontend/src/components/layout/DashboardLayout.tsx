@@ -20,26 +20,10 @@ const NAV = [
   { label: 'Settings', path: '/settings', iconKey: 'settings', section: 'TOOLS' },
 ];
 
-const PAGE_TITLES: Record<string, string> = {
-  '/': 'Dashboard',
-  '/clients': 'Client Management',
-  '/clients/new': 'New Client',
-  '/reports': 'Reports',
-  '/settings': 'Settings',
-};
-
 export default function DashboardLayout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-
-  const getTitle = () => {
-    const exact = PAGE_TITLES[location.pathname];
-    if (exact) return exact;
-    if (location.pathname.startsWith('/clients/') && !location.pathname.endsWith('/new')) return 'Client Details';
-    if (location.pathname.startsWith('/reports/')) return 'Report Workspace';
-    return 'CMA Pro AI';
-  };
 
   const isActive = (path: string) => {
     if (path === '/') return location.pathname === '/';
@@ -110,15 +94,6 @@ export default function DashboardLayout() {
 
       {/* Main */}
       <div className="main-content">
-        <header className="topbar">
-          <span className="topbar-title">{getTitle()}</span>
-          <div className="topbar-actions">
-            <Link to="/clients/new" className="btn btn-primary btn-sm">
-              <svg width="13" height="13" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd"/></svg>
-              New Client
-            </Link>
-          </div>
-        </header>
         <main className="page-content fade-in">
           <Outlet />
         </main>
