@@ -29,11 +29,13 @@ import projectionRoutes from './routes/projections.js';
 import aiRoutes from './routes/ai.js';
 import exportRoutes from './routes/exports.js';
 import mappingRoutes from './routes/mappings.js';
+import authRoutes from './routes/auth.js';
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', version: '2.0.0', service: 'CMA Pro AI API' });
 });
 
+app.use('/api/auth', authRoutes);
 app.use('/api/clients', clientRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/financials', financialRoutes);

@@ -14,9 +14,14 @@ export default function Login() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(''); setLoading(true);
-    try { await login(email, password); navigate('/'); }
-    catch (err: any) { setError(err.message.replace('Firebase: ', '').replace(/\(auth.*\)/, '').trim()); }
-    finally { setLoading(false); }
+    try {
+      await login(email, password);
+      navigate('/');
+    } catch (err: any) {
+      setError(err.message || 'Sign in failed. Please check your email and password.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleGoogle = async () => {
@@ -52,10 +57,6 @@ export default function Login() {
             <label className="form-label required">Password</label>
             <input type="password" className="form-input" placeholder="••••••••" value={password}
               onChange={e => setPassword(e.target.value)} required />
-          </div>
-
-          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-            <Link to="/forgot-password" style={{ fontSize: 12, color: 'var(--primary)' }}>Forgot password?</Link>
           </div>
 
           <button type="submit" className="btn btn-primary btn-lg w-full" disabled={loading}>

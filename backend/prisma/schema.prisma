@@ -15,9 +15,13 @@ datasource db {
 // ============================================================
 model User {
   id          String   @id @default(uuid())
-  firebaseUid String   @unique
+  firebaseUid String   @unique @default(cuid())
   email       String   @unique
+  password    String?  // hashed password for email/password auth
+  googleId    String?  @unique // for Google OAuth
   name        String?
+  displayName String?
+  photoUrl    String?
   role        UserRole @default(ANALYST)
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())

@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../../lib/api';
+import { useAuth } from '../../context/AuthContext';
 
 const LOAN_TYPES = ['Term Loan','Working Capital','CC Limit','OD Limit','Mudra Loan','Machinery Loan','MSME Loan','Startup Loan','Vehicle Loan','LAP','Home Loan'];
 
 export default function ClientDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [client, setClient] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
@@ -21,7 +23,7 @@ export default function ClientDetail() {
     if (!newReport.title) { alert('Please enter a report title'); return; }
     setCreating(true);
     try {
-      const r = await api.reports.create({ ...newReport, clientId: id });
+      const r = await api.reports.create({ ...newReport, clientId: id, userId: user?.uid });
       navigate(`/reports/${r.id}`);
     } catch (err: any) { alert(err.message); setCreating(false); }
   };

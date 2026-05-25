@@ -54,7 +54,14 @@ router.post('/', async (req, res) => {
   try {
     const { title, clientId, reportType, userId } = req.body;
 
-    let user = await prisma.user.findFirst({ where: { firebaseUid: userId || 'local-dev' } });
+    let user = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { id: userId || 'local-dev' },
+          { firebaseUid: userId || 'local-dev' }
+        ]
+      }
+    });
     if (!user) {
       user = await prisma.user.create({
         data: { firebaseUid: userId || 'local-dev', email: 'dev@cma.local', name: 'Dev User' }

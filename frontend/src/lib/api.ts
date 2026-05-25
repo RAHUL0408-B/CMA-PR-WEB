@@ -1,4 +1,3 @@
-import { auth } from './firebase';
 import { computeProjections, computeLoanSchedule } from './projectionEngine';
 
 export function safeParseJSON(val: any, fallback: any = {}): any {
@@ -53,7 +52,7 @@ const isOffline = () => {
 };
 
 async function getToken(): Promise<string | null> {
-  try { return (await auth.currentUser?.getIdToken()) || null; } catch { return null; }
+  return localStorage.getItem('cma_auth_token');
 }
 
 async function fetchAPI<T>(path: string, options: RequestInit = {}): Promise<T> {

@@ -1,46 +1,51 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 
-// Try to use Firebase Auth if configured, otherwise use local dev mode
-let auth: any = null;
-let signInWithEmailAndPassword: any = null;
-let createUserWithEmailAndPassword: any = null;
-let signOut: any = null;
-let onAuthStateChanged: any = null;
-let GoogleAuthProvider: any = null;
-let signInWithPopup: any = null;
-let sendPasswordResetEmail: any = null;
-let sendEmailVerification: any = null;
-let updateProfile: any = null;
+const BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000/api';
 
-const FIREBASE_CONFIGURED = !!import.meta.env.VITE_FIREBASE_API_KEY &&
-  import.meta.env.VITE_FIREBASE_API_KEY !== 'your_firebase_api_key';
+// ── Token helpers ──────────────────────────────────────────────
+const TOKEN_KEY = 'cma_auth_token';
+const USER_KEY  = 'cma_auth_user';
 
-if (FIREBASE_CONFIGURED) {
-  const firebaseAuth = await import('firebase/auth');
-  const firebaseLib = await import('../lib/firebase');
-  auth = firebaseLib.auth;
-  signInWithEmailAndPassword = firebaseAuth.signInWithEmailAndPassword;
-  createUserWithEmailAndPassword = firebaseAuth.createUserWithEmailAndPassword;
-  signOut = firebaseAuth.signOut;
-  onAuthStateChanged = firebaseAuth.onAuthStateChanged;
-  GoogleAuthProvider = firebaseAuth.GoogleAuthProvider;
-  signInWithPopup = firebaseAuth.signInWithPopup;
-  sendPasswordResetEmail = firebaseAuth.sendPasswordResetEmail;
-  sendEmailVerification = firebaseAuth.sendEmailVerification;
-  updateProfile = firebaseAuth.updateProfile;
+const saveSession = (token: string, user: any) => {
+  localStorage.setItem(TOKEN_KEY, token);
+  localStorage.setItem(USER_KEY, JSON.stringify(user));
+};
+
+const clearSession = () => {
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(USER_KEY);
+  localStorage.removeItem('cma_use_offline_mode');
+};
+
+export const getAuthToken = () => localStorage.getItem(TOKEN_KEY);
+
+// ── API call helper ────────────────────────────────────────────
+async function authFetch(path: string, body: any) {
+  const res = await fetch(`${BASE}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Request failed');
+  return data;
 }
 
-// Local dev mock user
-const DEV_USER = {
-  uid: 'local-dev',
-  email: 'dev@cma.local',
-  displayName: 'Dev User',
-  emailVerified: true,
-  getIdToken: async () => 'dev-token'
-} as any;
+// ── Types ──────────────────────────────────────────────────────
+interface AuthUser {
+  uid: string;       // maps to user.id
+  id: string;
+  email: string;
+  name?: string;
+  displayName?: string;
+  photoUrl?: string;
+  role: string;
+  createdAt: string;
+  getIdToken: () => Promise<string>;
+}
 
 interface AuthContextType {
-  user: any | null;
+  user: AuthUser | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string, name: string) => Promise<void>;
@@ -51,68 +56,76 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
+// ── Build user object from API response ────────────────────────
+const buildUser = (apiUser: any, token: string): AuthUser => ({
+  ...apiUser,
+  uid: apiUser.id,     // keep uid alias for compatibility
+  getIdToken: async () => token
+});
+
+// ── Provider ───────────────────────────────────────────────────
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<any | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Restore session on mount
   useEffect(() => {
-    if (FIREBASE_CONFIGURED && auth && onAuthStateChanged) {
-      const unsub = onAuthStateChanged(auth, (u: any) => { setUser(u); setLoading(false); });
-      return unsub;
-    } else {
-      // Local dev mode: auto-login with mock user
-      const savedUser = localStorage.getItem('cma_dev_user');
-      if (savedUser) {
-        setUser(DEV_USER);
-      }
-      setLoading(false);
+    const token = localStorage.getItem(TOKEN_KEY);
+    const saved  = localStorage.getItem(USER_KEY);
+    if (token && saved) {
+      try {
+        const u = JSON.parse(saved);
+        setUser(buildUser(u, token));
+        // Verify token is still valid in background
+        fetch(`${BASE}/auth/me`, {
+          headers: { Authorization: `Bearer ${token}` }
+        }).then(r => {
+          if (!r.ok) { clearSession(); setUser(null); }
+          else r.json().then(fresh => {
+            const refreshed = buildUser(fresh, token);
+            setUser(refreshed);
+            localStorage.setItem(USER_KEY, JSON.stringify(fresh));
+          });
+        }).catch(() => {}); // offline – keep saved session
+      } catch { clearSession(); }
     }
+    setLoading(false);
   }, []);
 
+  // ── Email / Password Login ──────────────────────────────────
   const login = async (email: string, password: string) => {
-    if (FIREBASE_CONFIGURED && auth && signInWithEmailAndPassword) {
-      await signInWithEmailAndPassword(auth, email, password);
-    } else {
-      // Dev mode: accept any credentials
-      localStorage.setItem('cma_dev_user', 'true');
-      setUser({ ...DEV_USER, email, displayName: email.split('@')[0] });
-    }
+    const { token, user: u } = await authFetch('/auth/login', { email, password });
+    saveSession(token, u);
+    setUser(buildUser(u, token));
   };
 
+  // ── Register ────────────────────────────────────────────────
   const register = async (email: string, password: string, name: string) => {
-    if (FIREBASE_CONFIGURED && auth && createUserWithEmailAndPassword) {
-      const cred = await createUserWithEmailAndPassword(auth, email, password);
-      await updateProfile(cred.user, { displayName: name });
-      await sendEmailVerification(cred.user);
-    } else {
-      localStorage.setItem('cma_dev_user', 'true');
-      setUser({ ...DEV_USER, email, displayName: name });
-    }
+    const { token, user: u } = await authFetch('/auth/register', { email, password, name });
+    saveSession(token, u);
+    setUser(buildUser(u, token));
   };
 
+  // ── Google Login (redirect to Google OAuth) ─────────────────
   const loginWithGoogle = async () => {
-    if (FIREBASE_CONFIGURED && auth && GoogleAuthProvider && signInWithPopup) {
-      const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
-    } else {
-      localStorage.setItem('cma_dev_user', 'true');
-      setUser(DEV_USER);
-    }
+    // For now: show a friendly message that Google OAuth needs backend config
+    alert(
+      '🔑 Google Sign-In Setup Required\n\n' +
+      'To enable Google login, your admin needs to configure Google OAuth in the backend.\n\n' +
+      'For now, please use Email + Password to sign in.\n' +
+      'You can register a new account if you don\'t have one.'
+    );
   };
 
+  // ── Logout ──────────────────────────────────────────────────
   const logout = async () => {
-    if (FIREBASE_CONFIGURED && auth && signOut) {
-      await signOut(auth);
-    } else {
-      localStorage.removeItem('cma_dev_user');
-      setUser(null);
-    }
+    clearSession();
+    setUser(null);
   };
 
+  // ── Reset Password (placeholder) ────────────────────────────
   const resetPassword = async (email: string) => {
-    if (FIREBASE_CONFIGURED && auth && sendPasswordResetEmail) {
-      await sendPasswordResetEmail(auth, email);
-    }
+    alert(`Password reset requested for ${email}.\nPlease contact your admin to reset your password.`);
   };
 
   return (
