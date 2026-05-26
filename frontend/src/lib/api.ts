@@ -1,4 +1,6 @@
 import { computeProjections, computeLoanSchedule } from './projectionEngine';
+import { isRealtimeReady } from './firebase';
+import * as fdb from './firebaseDB';
 
 export function safeParseJSON(val: any, fallback: any = {}): any {
   if (!val) return fallback;
@@ -55,11 +57,31 @@ async function getToken(): Promise<string | null> {
   return localStorage.getItem('cma_auth_token');
 }
 
+// ── Helper: match route pattern and extract params ─────────────
+function matchRoute(pattern: string, cleanPath: string): Record<string, string> | null {
+  const pp = pattern.split('/');
+  const qp = cleanPath.split('/');
+  if (pp.length !== qp.length) return null;
+  const params: Record<string, string> = {};
+  for (let i = 0; i < pp.length; i++) {
+    if (pp[i].startsWith(':')) params[pp[i].substring(1)] = qp[i];
+    else if (pp[i] !== qp[i]) return null;
+  }
+  return params;
+}
+
 async function fetchAPI<T>(path: string, options: RequestInit = {}): Promise<T> {
+  // ── 1. Firebase Realtime Database (when configured) ────────
+  if (isRealtimeReady()) {
+    return handleFirebaseRequest<T>(path, options);
+  }
+
+  // ── 2. Offline localStorage ─────────────────────────────────
   if (isOffline()) {
     return handleOfflineRequest<T>(path, options);
   }
 
+  // ── 3. Express backend ──────────────────────────────────────
   try {
     const token = await getToken();
     const res = await fetch(`${BASE}${path}`, {
@@ -77,13 +99,84 @@ async function fetchAPI<T>(path: string, options: RequestInit = {}): Promise<T> 
     return res.json();
   } catch (err: any) {
     if (err instanceof TypeError || err.message?.includes('Failed to fetch') || err.message?.includes('NetworkError')) {
-      console.warn('Backend server not detected. Switching to browser-only offline mode (LocalStorage).');
+      console.warn('Backend unavailable — switching to localStorage offline mode.');
       localStorage.setItem('cma_use_offline_mode', 'true');
       window.dispatchEvent(new Event('cma_offline_mode_enabled'));
       return handleOfflineRequest<T>(path, options);
     }
     throw err;
   }
+}
+
+// ── Firebase Realtime DB handler ───────────────────────────────
+async function handleFirebaseRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const method = options.method || 'GET';
+  const cleanPath = path.split('?')[0];
+  const getBody = () => (options.body ? JSON.parse(options.body as string) : {});
+  const mr = (pat: string) => matchRoute(pat, cleanPath);
+
+  let p: Record<string, string> | null;
+
+  // CLIENTS
+  if (cleanPath === '/clients') {
+    if (method === 'GET')  return await fdb.fbGetClients() as T;
+    if (method === 'POST') return await fdb.fbCreateClient(getBody()) as T;
+  }
+  p = mr('/clients/:id');
+  if (p) {
+    if (method === 'GET')    return await fdb.fbGetClient(p.id) as T;
+    if (method === 'PUT')    return await fdb.fbUpdateClient(p.id, getBody()) as T;
+    if (method === 'DELETE') { await fdb.fbDeleteClient(p.id); return { success: true } as T; }
+  }
+
+  // REPORTS
+  if (cleanPath === '/reports') {
+    if (method === 'GET') {
+      const cid = path.includes('clientId=') ? path.split('clientId=')[1]?.split('&')[0] : undefined;
+      return await fdb.fbGetReports(cid) as T;
+    }
+    if (method === 'POST') return await fdb.fbCreateReport(getBody()) as T;
+  }
+  p = mr('/reports/:id');
+  if (p) {
+    if (method === 'GET')    return await fdb.fbGetReport(p.id) as T;
+    if (method === 'PUT')    return await fdb.fbUpdateReport(p.id, getBody()) as T;
+    if (method === 'DELETE') { await fdb.fbDeleteReport(p.id); return { success: true } as T; }
+  }
+
+  // FINANCIALS
+  p = mr('/financials/:reportId');
+  if (p) {
+    if (method === 'GET')  return await fdb.fbGetFinancials(p.reportId) as T;
+    if (method === 'POST') return await fdb.fbUpsertFinancial(p.reportId, getBody()) as T;
+  }
+  p = mr('/financials/:reportId/:yearId');
+  if (p && method === 'DELETE') { await fdb.fbDeleteFinancial(p.reportId, p.yearId); return { success: true } as T; }
+
+  // PROJECTIONS
+  p = mr('/projections/:reportId/assumptions');
+  if (p) {
+    if (method === 'GET') return await fdb.fbGetAssumptions(p.reportId) as T;
+    if (method === 'PUT') return await fdb.fbSaveAssumptions(p.reportId, getBody()) as T;
+  }
+  p = mr('/projections/:reportId/compute');
+  if (p && method === 'POST') return await fdb.fbComputeProjections(p.reportId) as T;
+  p = mr('/projections/:reportId');
+  if (p && method === 'GET') return await fdb.fbGetProjections(p.reportId) as T;
+
+  // AI
+  p = mr('/ai/:reportId/generate');
+  if (p && method === 'POST') {
+    const mod = getBody().module || 'executive_summary';
+    const text = `### AI Analysis\n\nGenerating analysis for module: ${mod}. Please configure your Anthropic API key on the backend for full AI-powered analysis.`;
+    await fdb.fbSaveAILog(p.reportId, mod, text);
+    return { content: text, module: mod, tokens: { input_tokens: 0, output_tokens: 0 } } as T;
+  }
+  p = mr('/ai/:reportId/history');
+  if (p && method === 'GET') return await fdb.fbGetAIHistory(p.reportId) as T;
+
+  // Fall through to offline for mappings/exports
+  return handleOfflineRequest<T>(path, options);
 }
 
 async function handleOfflineRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
