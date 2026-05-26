@@ -10,7 +10,7 @@ import {
   type User as FirebaseUser
 } from 'firebase/auth';
 import { createContext, useContext, useEffect, useState } from 'react';
-import { auth } from '../lib/firebase';
+import { auth, isFirebaseReady } from '../lib/firebase';
 
 // ── Types ──────────────────────────────────────────────────────
 interface AuthUser {
@@ -38,7 +38,7 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-// ── Convert Firebase user to AuthUser ──────────────────────────
+// ── Firebase user → AuthUser ────────────────────────────────────
 const toAuthUser = (fbUser: FirebaseUser): AuthUser => ({
   uid: fbUser.uid,
   id: fbUser.uid,
@@ -52,18 +52,7 @@ const toAuthUser = (fbUser: FirebaseUser): AuthUser => ({
   getIdToken: () => fbUser.getIdToken()
 });
 
-// ── Check if Firebase is properly configured ───────────────────
-const isFirebaseConfigured = () => {
-  const config = auth.app.options;
-  return (
-    config.apiKey &&
-    config.apiKey !== 'demo-api-key' &&
-    config.projectId &&
-    config.projectId !== 'demo-project'
-  );
-};
-
-// ── Offline fallback helpers ───────────────────────────────────
+// ── Offline storage helpers ────────────────────────────────────
 const USERS_KEY = 'cma_local_users';
 const TOKEN_KEY = 'cma_auth_token';
 const USER_KEY  = 'cma_auth_user';
@@ -71,9 +60,9 @@ const USER_KEY  = 'cma_auth_user';
 const getLocalUsers = (): any[] => {
   try { return JSON.parse(localStorage.getItem(USERS_KEY) || '[]'); } catch { return []; }
 };
-const saveLocalUsers = (users: any[]) => localStorage.setItem(USERS_KEY, JSON.stringify(users));
+const saveLocalUsers = (u: any[]) => localStorage.setItem(USERS_KEY, JSON.stringify(u));
 const encodePass = (p: string) => btoa(unescape(encodeURIComponent(p)));
-const checkPass  = (p: string, enc: string) => encodePass(p) === enc;
+const checkPass  = (p: string, e: string) => encodePass(p) === e;
 
 const buildOfflineUser = (data: any): AuthUser => ({
   uid: data.id,
@@ -94,36 +83,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (isFirebaseConfigured()) {
-      // ── Firebase: listen to auth state changes ──────────────
+    if (isFirebaseReady() && auth) {
+      // Firebase is configured — listen to real auth state
       const unsub = onAuthStateChanged(auth, (fbUser) => {
         setUser(fbUser ? toAuthUser(fbUser) : null);
         setLoading(false);
       });
       return unsub;
     } else {
-      // ── Offline: restore from localStorage ─────────────────
-      const saved = localStorage.getItem(USER_KEY);
-      const token = localStorage.getItem(TOKEN_KEY);
-      if (saved && token) {
-        try { setUser(buildOfflineUser(JSON.parse(saved))); } catch { /* ignore */ }
-      }
+      // Offline mode — restore from localStorage
+      try {
+        const saved = localStorage.getItem(USER_KEY);
+        const token = localStorage.getItem(TOKEN_KEY);
+        if (saved && token) setUser(buildOfflineUser(JSON.parse(saved)));
+      } catch { /* ignore */ }
       setLoading(false);
     }
   }, []);
 
   // ── Login ──────────────────────────────────────────────────────
   const login = async (email: string, password: string) => {
-    if (isFirebaseConfigured()) {
-      // Firebase login
+    if (isFirebaseReady() && auth) {
       await signInWithEmailAndPassword(auth, email, password);
-      // onAuthStateChanged will update user
     } else {
       // Offline login
       const users = getLocalUsers();
       const found = users.find((u: any) => u.email === email.toLowerCase());
       if (!found) throw new Error('No account found. Please register first.');
-      if (!checkPass(password, found.password)) throw new Error('Incorrect password.');
+      if (!checkPass(password, found.password)) throw new Error('Incorrect password. Try again.');
       const { password: _p, ...safe } = found;
       localStorage.setItem(USER_KEY, JSON.stringify(safe));
       localStorage.setItem(TOKEN_KEY, 'offline_' + Date.now());
@@ -134,11 +121,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // ── Register ────────────────────────────────────────────────────
   const register = async (email: string, password: string, name: string) => {
-    if (isFirebaseConfigured()) {
-      // Firebase register
+    if (isFirebaseReady() && auth) {
       const cred = await createUserWithEmailAndPassword(auth, email, password);
       await updateProfile(cred.user, { displayName: name });
-      // onAuthStateChanged will update user
     } else {
       // Offline register
       const users = getLocalUsers();
@@ -165,26 +150,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // ── Google Sign-In ──────────────────────────────────────────────
   const loginWithGoogle = async () => {
-    if (isFirebaseConfigured()) {
+    if (isFirebaseReady() && auth) {
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: 'select_account' });
       await signInWithPopup(auth, provider);
-      // onAuthStateChanged will update user
     } else {
       throw new Error(
-        'Firebase is not configured yet.\n\n' +
-        'To enable Google Sign-In:\n' +
-        '1. Create a project at console.firebase.google.com\n' +
-        '2. Enable Email/Password and Google auth\n' +
-        '3. Add Firebase config to Netlify environment variables\n\n' +
-        'For now, please use Email + Password to sign in.'
+        'Google Sign-In needs Firebase setup.\n\n' +
+        'Steps:\n' +
+        '1. Go to console.firebase.google.com\n' +
+        '2. Create project → Enable Google Auth\n' +
+        '3. Add Firebase keys to Netlify env vars\n' +
+        '4. Redeploy Netlify\n\n' +
+        'For now use Email + Password ✅'
       );
     }
   };
 
   // ── Logout ──────────────────────────────────────────────────────
   const logout = async () => {
-    if (isFirebaseConfigured()) {
+    if (isFirebaseReady() && auth) {
       await signOut(auth);
     }
     localStorage.removeItem(USER_KEY);
@@ -195,9 +180,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // ── Reset Password ──────────────────────────────────────────────
   const resetPassword = async (email: string) => {
-    if (isFirebaseConfigured()) {
+    if (isFirebaseReady() && auth) {
       await sendPasswordResetEmail(auth, email);
-      alert(`✅ Password reset email sent to ${email}.\nPlease check your inbox.`);
+      alert(`✅ Password reset email sent to ${email}. Check your inbox.`);
     } else {
       alert('Offline mode: Contact your admin to reset your password.');
     }
