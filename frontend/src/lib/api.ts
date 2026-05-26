@@ -183,18 +183,30 @@ async function handleOfflineRequest<T>(path: string, options: RequestInit = {}):
   const method = options.method || 'GET';
   const cleanPath = path.split('?')[0];
 
+  // ── Scope localStorage keys by userId (data isolation) ────────
+  const userId = localStorage.getItem('cma_auth_user')
+    ? (() => { try { return JSON.parse(localStorage.getItem('cma_auth_user')!).id || 'default'; } catch { return 'default'; } })()
+    : 'default';
+  const scopedKey = (key: string) => `${key}_${userId}`;
+
   const getDB = (key: string): any[] => {
     try {
-      const val = localStorage.getItem(key);
-      return val ? JSON.parse(val) : [];
+      const val = localStorage.getItem(scopedKey(key));
+      // Fallback to unscoped key for migration
+      if (!val) {
+        const legacy = localStorage.getItem(key);
+        return legacy ? JSON.parse(legacy) : [];
+      }
+      return JSON.parse(val);
     } catch {
       return [];
     }
   };
 
   const setDB = (key: string, data: any[]) => {
-    localStorage.setItem(key, JSON.stringify(data));
+    localStorage.setItem(scopedKey(key), JSON.stringify(data));
   };
+
 
   const matchRoute = (pattern: string) => {
     const patternParts = pattern.split('/');
